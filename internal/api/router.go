@@ -1,0 +1,348 @@
+package api
+
+import (
+	"bytes"
+	"context"
+	"io"
+	"io/fs"
+	"net/http"
+	"os"
+	"path"
+	"strconv"
+	"strings"
+	"time"
+
+	"CLIProxyAPIManager/internal/auth"
+	"CLIProxyAPIManager/internal/config"
+	"CLIProxyAPIManager/internal/poller"
+	"CLIProxyAPIManager/internal/quota"
+	"CLIProxyAPIManager/internal/service"
+	"CLIProxyAPIManager/internal/timeutil"
+	"CLIProxyAPIManager/internal/updatecheck"
+	"CLIProxyAPIManager/internal/version"
+	"github.com/gin-gonic/gin"
+)
+
+const appBasePathPlaceholder = "__APP_BASE_PATH__"
+
+type StatusProvider interface {
+	Status() poller.Status
+}
+
+type ActiveStatusRecorder interface {
+	RecordActiveStatus(time.Time)
+}
+
+type QuotaProvider interface {
+	GetCachedQuota(context.Context, quota.CacheRequest) (quota.CacheResponse, error)
+	Refresh(context.Context, quota.RefreshRequest) (quota.RefreshResponse, error)
+	GetRefreshTaskByAuthIndex(context.Context, string) (quota.RefreshTaskResponse, error)
+	GetInspectionStatus(context.Context) (quota.InspectionStatus, error)
+	StartInspection(context.Context) (quota.InspectionStatus, error)
+	Reset(context.Context, quota.ResetRequest) (quota.ResetResponse, error)
+}
+
+type StatusRouteConfig struct {
+	CPAPublicURL            string
+	ActiveRecorder          ActiveStatusRecorder
+	QuotaAutoRefreshEnabled bool
+}
+
+type OptionalProviders struct {
+	UsageIdentity  service.UsageIdentityProvider
+	Quota          QuotaProvider
+	CPAAPIKeys     service.CPAAPIKeyProvider
+	AuthFiles      service.AuthFilesManagementProvider
+	AuthCooldowns  service.AuthFileCooldownProvider
+	ProxyPools     service.ProxyPoolProvider
+	CPAManager     CPAManagerProvider
+	Status         StatusRouteConfig
+	Config         *config.Config
+	UsageEventsHub *service.UsageEventHub
+}
+
+func NewRouter(
+	staticFS fs.FS,
+	statusProvider StatusProvider,
+	usageProvider service.UsageProvider,
+	pricingProvider service.PricingProvider,
+	authConfig AuthConfig,
+	authHandler *authHandler,
+	basePath string,
+	optionalProviders ...OptionalProviders,
+) *gin.Engine {
+	router := gin.New()
+	_ = router.SetTrustedProxies(nil)
+	router.Use(gin.Recovery())
+
+	appGroup := router.Group(basePath)
+	registerHealthRoutes(appGroup)
+
+	apiV1 := appGroup.Group("/api/v1")
+	if debugAPIRoutesEnabled() {
+		registerPingRoutes(apiV1)
+	}
+
+	authGroup := apiV1.Group("/auth")
+	if authHandler == nil {
+		authHandler = NewAuthHandler(authConfig, nil)
+	}
+	authHandler.registerRoutes(authGroup)
+
+	var usageIdentityProvider service.UsageIdentityProvider
+	var quotaProvider QuotaProvider
+	var cpaAPIKeyProvider service.CPAAPIKeyProvider
+	var authFilesProvider service.AuthFilesManagementProvider
+	var authCooldownProvider service.AuthFileCooldownProvider
+	var proxyPoolProvider service.ProxyPoolProvider
+	var cpaManagerProvider CPAManagerProvider
+	var statusConfig StatusRouteConfig
+	var appConfig *config.Config
+	var usageEventsHub *service.UsageEventHub
+	if len(optionalProviders) > 0 {
+		usageIdentityProvider = optionalProviders[0].UsageIdentity
+		quotaProvider = optionalProviders[0].Quota
+		cpaAPIKeyProvider = optionalProviders[0].CPAAPIKeys
+		authFilesProvider = optionalProviders[0].AuthFiles
+		authCooldownProvider = optionalProviders[0].AuthCooldowns
+		proxyPoolProvider = optionalProviders[0].ProxyPools
+		cpaManagerProvider = optionalProviders[0].CPAManager
+		statusConfig = optionalProviders[0].Status
+		appConfig = optionalProviders[0].Config
+		usageEventsHub = optionalProviders[0].UsageEventsHub
+	}
+	authHandler.setCPAAPIKeyProvider(cpaAPIKeyProvider)
+
+	registerUsageOverviewRoute(apiV1, usageProvider, cpaAPIKeyProvider)
+	registerUsageAnalysisRoute(apiV1, usageProvider, cpaAPIKeyProvider)
+	registerUsageEventReadRoutes(apiV1, usageProvider, usageIdentityProvider, cpaAPIKeyProvider)
+	registerUsageEventStreamRoute(apiV1, usageProvider, usageIdentityProvider, cpaAPIKeyProvider, usageEventsHub)
+
+	versionProtected := apiV1.Group("")
+	versionProtected.Use(authHandler.roleMiddleware(auth.RoleAdmin, auth.RoleAPIKeyViewer))
+	registerVersionRoutes(versionProtected)
+
+	adminProtected := apiV1.Group("")
+	adminProtected.Use(authHandler.adminMiddleware())
+	registerStatusRoutes(adminProtected, statusProvider, statusConfig)
+	registerConfigDiagnosticsRoutes(adminProtected, appConfig)
+	registerUpdateRoutes(adminProtected, nil)
+	registerUsageEventExportRoute(adminProtected, usageProvider, usageIdentityProvider, cpaAPIKeyProvider)
+	registerUsageIdentityRoutes(adminProtected, usageIdentityProvider)
+	registerAuthFileManagementRoutes(adminProtected, authFilesProvider)
+	registerAuthFileCooldownRoutes(adminProtected, authCooldownProvider)
+	registerProxyPoolRoutes(adminProtected, proxyPoolProvider)
+	registerAuthSessionManagementRoutes(adminProtected, authHandler)
+	registerCPAManagerRoutes(adminProtected, cpaManagerProvider)
+	registerCPAAPIKeyRoutes(adminProtected, cpaAPIKeyProvider)
+	registerPricingRoutes(adminProtected, pricingProvider)
+	registerQuotaRoutes(adminProtected, quotaProvider)
+
+	keyViewerProtected := apiV1.Group("")
+	keyViewerProtected.Use(authHandler.apiKeyViewerMiddleware())
+	registerKeyOverviewRoute(keyViewerProtected, usageProvider, cpaAPIKeyProvider, authHandler)
+
+	if staticFS != nil {
+		if indexFile, err := staticFS.Open("index.html"); err == nil {
+			_ = indexFile.Close()
+			httpFS := http.FS(staticFS)
+			serveIndex := func(c *gin.Context) {
+				indexHTML, err := renderIndexHTML(staticFS, basePath)
+				if err != nil {
+					c.Status(http.StatusNotFound)
+					return
+				}
+				setHTMLCacheHeaders(c)
+				c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
+			}
+			serveAsset := func(c *gin.Context) {
+				assetPath := "assets/" + strings.TrimPrefix(c.Param("filepath"), "/")
+				if assetFile, err := staticFS.Open(assetPath); err == nil {
+					_ = assetFile.Close()
+					setStaticAssetCacheHeaders(c)
+					c.FileFromFS(assetPath, httpFS)
+					return
+				}
+				c.Status(http.StatusNotFound)
+			}
+
+			appGroup.GET("/", serveIndex)
+			appGroup.GET("/assets/*filepath", serveAsset)
+			appGroup.HEAD("/assets/*filepath", serveAsset)
+			router.NoRoute(func(c *gin.Context) {
+				requestPath, ok := stripBasePath(basePath, c.Request.URL.Path)
+				if !ok {
+					c.Status(http.StatusNotFound)
+					return
+				}
+				if strings.HasPrefix(requestPath, "/api/") {
+					c.Status(http.StatusNotFound)
+					return
+				}
+
+				if assetPath, ok := staticAssetPath(requestPath); ok {
+					if assetFile, err := staticFS.Open(assetPath); err == nil {
+						_ = assetFile.Close()
+						setStaticAssetCacheHeaders(c)
+						c.FileFromFS(assetPath, httpFS)
+						return
+					}
+				}
+
+				serveIndex(c)
+			})
+		}
+	}
+
+	return router
+}
+
+func debugAPIRoutesEnabled() bool {
+	return version.Version == "dev" || os.Getenv("GIN_MODE") == gin.DebugMode
+}
+
+func registerPingRoutes(router gin.IRoutes) {
+	router.GET("/ping", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "ok"})
+	})
+}
+
+func setHTMLCacheHeaders(c *gin.Context) {
+	setNoStoreHeaders(c)
+}
+
+func setNoStoreHeaders(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	c.Header("Pragma", "no-cache")
+	c.Header("Expires", "0")
+}
+
+func setStaticAssetCacheHeaders(c *gin.Context) {
+	c.Header("Cache-Control", "public, max-age=31536000, immutable")
+}
+
+func renderIndexHTML(staticFS fs.FS, basePath string) ([]byte, error) {
+	indexFile, err := staticFS.Open("index.html")
+	if err != nil {
+		return nil, err
+	}
+	defer indexFile.Close()
+	indexHTML, err := io.ReadAll(indexFile)
+	if err != nil {
+		return nil, err
+	}
+
+	return bytes.ReplaceAll(
+		indexHTML,
+		[]byte(strconv.Quote(appBasePathPlaceholder)),
+		[]byte(strconv.Quote(basePath)),
+	), nil
+}
+
+func cleanURLPath(requestPath string) string {
+	cleaned := path.Clean(requestPath)
+	if cleaned == "." {
+		return "/"
+	}
+	if !strings.HasPrefix(cleaned, "/") {
+		return "/" + cleaned
+	}
+	return cleaned
+}
+
+func staticAssetPath(requestPath string) (string, bool) {
+	cleaned := cleanURLPath(requestPath)
+	if strings.Contains(cleaned, "\\") {
+		return "", false
+	}
+	relPath := strings.TrimPrefix(cleaned, "/")
+	if relPath == "" {
+		return "", false
+	}
+	return relPath, true
+}
+
+func stripBasePath(basePath, requestPath string) (string, bool) {
+	cleaned := cleanURLPath(requestPath)
+	if basePath == "" {
+		return cleaned, true
+	}
+	if cleaned == basePath {
+		return "/", true
+	}
+	if !strings.HasPrefix(cleaned, basePath+"/") {
+		return "", false
+	}
+	trimmed := strings.TrimPrefix(cleaned, basePath)
+	if trimmed == "" {
+		return "/", true
+	}
+	return trimmed, true
+}
+
+type statusResponse struct {
+	Running                 bool       `json:"running"`
+	SyncRunning             bool       `json:"sync_running"`
+	Timezone                string     `json:"timezone"`
+	QuotaAutoRefreshEnabled bool       `json:"quotaAutoRefreshEnabled"`
+	CPAPublicURL            string     `json:"cpa_public_url,omitempty"`
+	LastRunAt               *time.Time `json:"last_run_at,omitempty"`
+	LastError               string     `json:"last_error,omitempty"`
+	LastWarning             string     `json:"last_warning,omitempty"`
+	LastStatus              string     `json:"last_status,omitempty"`
+}
+
+type versionResponse struct {
+	Version            string `json:"version"`
+	UpdateCheckEnabled bool   `json:"updateCheckEnabled"`
+}
+
+func registerVersionRoutes(router gin.IRoutes) {
+	router.GET("/version", func(c *gin.Context) {
+		setNoStoreHeaders(c)
+		c.JSON(http.StatusOK, buildVersionResponse())
+	})
+}
+
+func buildVersionResponse() versionResponse {
+	return versionResponse{
+		Version:            version.Version,
+		UpdateCheckEnabled: updatecheck.IsStableVersion(version.Version),
+	}
+}
+
+func registerStatusRoutes(router gin.IRoutes, statusProvider StatusProvider, config StatusRouteConfig) {
+	router.GET("/status", func(c *gin.Context) {
+		if statusProvider == nil {
+			c.JSON(http.StatusOK, buildStatusResponse(poller.Status{}, config))
+			return
+		}
+
+		c.JSON(http.StatusOK, buildStatusResponse(statusProvider.Status(), config))
+	})
+	router.GET("/status/active", func(c *gin.Context) {
+		if config.ActiveRecorder != nil {
+			// 前端可见页面用这个轻量心跳续约，避免限额自动刷新在无人查看后台时持续扫库和请求上游。
+			config.ActiveRecorder.RecordActiveStatus(time.Now())
+		}
+		c.Status(http.StatusNoContent)
+	})
+}
+
+func buildStatusResponse(status poller.Status, config StatusRouteConfig) statusResponse {
+	response := statusResponse{
+		Running:                 status.Running,
+		SyncRunning:             status.SyncRunning,
+		Timezone:                time.Local.String(),
+		QuotaAutoRefreshEnabled: config.QuotaAutoRefreshEnabled,
+		CPAPublicURL:            config.CPAPublicURL,
+		LastError:               status.LastError,
+		LastWarning:             status.LastWarning,
+		LastStatus:              status.LastStatus,
+	}
+	if !status.LastRunAt.IsZero() {
+		lastRunAt := timeutil.NormalizeStorageTime(status.LastRunAt)
+		response.LastRunAt = &lastRunAt
+	}
+	return response
+}

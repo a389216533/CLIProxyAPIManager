@@ -1,0 +1,72 @@
+import { describe, expect, it } from 'vitest';
+import { calculateCacheRate, formatCompactNumber, resolveUsageFilterWindow } from '@/utils/usage';
+
+describe('resolveUsageFilterWindow', () => {
+  it('resolves today from local day start through the refresh anchor', () => {
+    const nowMs = Date.parse('2026-04-23T12:34:56.000Z');
+    const expectedStart = new Date(nowMs);
+    expectedStart.setHours(0, 0, 0, 0);
+
+    const window = resolveUsageFilterWindow(null, 'today', { nowMs });
+
+    expect(window).toEqual({
+      startMs: expectedStart.getTime(),
+      endMs: nowMs,
+      windowMinutes: Math.max((nowMs - expectedStart.getTime()) / 60000, 1),
+    });
+  });
+
+  it('resolves yesterday as the previous local day boundary', () => {
+    const nowMs = Date.parse('2026-04-23T12:34:56.000Z');
+    const expectedStart = new Date(nowMs);
+    expectedStart.setHours(0, 0, 0, 0);
+    expectedStart.setDate(expectedStart.getDate() - 1);
+    const expectedEnd = new Date(expectedStart);
+    expectedEnd.setDate(expectedEnd.getDate() + 1);
+    expectedEnd.setMilliseconds(expectedEnd.getMilliseconds() - 1);
+
+    const window = resolveUsageFilterWindow(null, 'yesterday', { nowMs });
+
+    expect(window).toEqual({
+      startMs: expectedStart.getTime(),
+      endMs: expectedEnd.getTime(),
+      windowMinutes: 24 * 60,
+    });
+  });
+
+  it('resolves 30d as a rolling thirty-day window', () => {
+    const nowMs = Date.parse('2026-04-23T12:34:56.000Z');
+
+    const window = resolveUsageFilterWindow(null, '30d', { nowMs });
+
+    expect(window).toEqual({
+      startMs: nowMs - 30 * 24 * 60 * 60 * 1000,
+      endMs: nowMs,
+      windowMinutes: 30 * 24 * 60,
+    });
+  });
+});
+
+describe('calculateCacheRate', () => {
+  it('uses normalized input tokens as the denominator', () => {
+    expect(calculateCacheRate({ inputTokens: 1000, cachedTokens: 250 })).toBe(25);
+  });
+
+  it('does not apply provider-specific token math in the frontend', () => {
+    expect(calculateCacheRate({ inputTokens: 400, cachedTokens: 600 })).toBe(150);
+  });
+
+  it('returns null when there is no cacheable input', () => {
+    expect(calculateCacheRate({ inputTokens: 0, cachedTokens: 0 })).toBeNull();
+  });
+});
+
+describe('formatCompactNumber', () => {
+  it('formats compact numbers with 万 and 亿 only', () => {
+    expect(formatCompactNumber(950)).toBe('950');
+    expect(formatCompactNumber(1_000)).toBe('1,000');
+    expect(formatCompactNumber(12_345)).toBe('1.2万');
+    expect(formatCompactNumber(1_234_567)).toBe('123.5万');
+    expect(formatCompactNumber(123_456_789)).toBe('1.2亿');
+  });
+});
