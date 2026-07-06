@@ -8,7 +8,7 @@ import quotaCostIcon from '@/assets/icons/quota-cost.svg'
 import quotaTokenIcon from '@/assets/icons/quota-token.svg'
 import styles from './CredentialSections.module.scss'
 import type { AuthFileCredentialRow, DisplayQuota, PlanTypeTone } from './credentialViewModels'
-import { deleteAuthFiles, importAuthFilesFromToken, setAuthFilesDisabled, testProxyPool, type UsageIdentityPageSort } from '@/lib/api'
+import { deleteAuthFiles, importAuthFilesFromToken, setAuthFilesDisabled, type UsageIdentityPageSort } from '@/lib/api'
 import { formatUserActionableError } from '@/lib/errorMessages'
 import type { ProxyPool, ProxyPoolTestResponse, ProxyPoolTestTargetResult, UsageQuotaInspectionResult, UsageQuotaInspectionResultStatus, UsageQuotaInspectionStatusResponse } from '@/lib/types'
 import { CredentialAliasEditor, isCredentialAliasEditorDisabled } from './CredentialAliasEditor'
@@ -30,6 +30,7 @@ type ProxyPoolLatencySortKey = 'latency' | 'gpt' | 'claude'
 type ProxyPoolLatencyTone = 'good' | 'normal' | 'warning' | 'error' | 'muted'
 type ProxyPoolSortState = { key: ProxyPoolLatencySortKey; direction: SortDirection }
 type ProxyPoolBindingSort = 'name_asc' | 'name_desc' | 'proxy_asc' | 'proxy_desc'
+export type ProxyPoolTestHistoryMap = Record<string, ProxyPoolTestResponse[]>
 type QuotaErrorDisplay = {
   code?: string
   message: string
@@ -47,6 +48,8 @@ type QuotaResetPopoverPosition = {
 const QUOTA_ERROR_MESSAGE_MAX_LENGTH = 96
 const QUOTA_ERROR_PARSE_MAX_DEPTH = 10
 const AUTH_FILE_DISPLAY_MODE_STORAGE_KEY = 'cpa.credentials.authFiles.displayMode'
+const PROXY_POOL_TEST_HISTORY_STORAGE_KEY = 'cpa.proxyPools.testHistory.v1'
+export const PROXY_POOL_TEST_HISTORY_LIMIT = 20
 export const INSPECTION_RESULT_PAGE_SIZE_OPTIONS = [10, 20, 50] as const
 const DEFAULT_INSPECTION_RESULT_PAGE_SIZE = INSPECTION_RESULT_PAGE_SIZE_OPTIONS[0]
 const INSPECTION_SELECTABLE_RESULT_STATUSES = new Set<InspectionResultStatusFilter>([
@@ -142,6 +145,7 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
   const [quickProxyPoolId, setQuickProxyPoolId] = useState('')
   const [quickProxySubmitting, setQuickProxySubmitting] = useState(false)
   const [quickProxyError, setQuickProxyError] = useState('')
+  const [authFileProxyPoolTestHistory] = useState<ProxyPoolTestHistoryMap>(() => readStoredProxyPoolTestHistory())
   const [cooldownActionAuthIndex, setCooldownActionAuthIndex] = useState('')
   const showHealthMode = displayMode === 'health'
   const canRefresh = rows.some((row) => !isRowRefreshing(row) && !row.identity.is_deleted) && !quotaRefreshing
@@ -252,9 +256,15 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
     ...proxyPools.map((pool) => ({ value: pool.id, label: pool.name }))
   ], [proxyPools])
 
+  const authFileProxyPoolTestResults = useMemo(() => readProxyPoolTestHistory(authFileProxyPoolTestHistory), [authFileProxyPoolTestHistory])
   const quickProxyPoolOptions = useMemo(
-    () => proxyPools.map((pool) => ({ value: pool.id, label: pool.name })),
-    [proxyPools]
+    () => proxyPools.map((pool) => ({
+      value: pool.id,
+      label: pool.name,
+      suffix: buildProxyPoolOptionMeta(pool, authFileProxyPoolTestResults[pool.id], authFileProxyPoolTestHistory[pool.id]),
+      suffixAriaLabel: buildProxyPoolOptionMeta(pool, authFileProxyPoolTestResults[pool.id], authFileProxyPoolTestHistory[pool.id]),
+    })),
+    [authFileProxyPoolTestHistory, authFileProxyPoolTestResults, proxyPools]
   )
 
   const openInspection = () => {
@@ -446,6 +456,7 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
                   disabled={proxyPoolsLoading || quickProxySubmitting}
                   className={styles.credentialQuickProxySelect}
                   fullWidth={false}
+                  dropdownMinWidth={360}
                 />
                 <button type="button" onClick={() => void applyQuickProxyPool(quickProxyPoolId)} disabled={quickProxySubmitting || quickProxyPoolId === '' || authFileNames.length === 0}>应用</button>
                 <button type="button" onClick={() => void applyQuickProxyPool(null)} disabled={quickProxySubmitting || authFileNames.length === 0}>清空</button>
@@ -731,7 +742,7 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
             <option value="" disabled>批量应用代理...</option>
             <option value="__clear__">清除代理</option>
             {proxyPools.map((pool) => (
-              <option key={pool.id} value={pool.id}>{pool.name}</option>
+              <option key={pool.id} value={pool.id}>{buildProxyPoolOptionLabel(pool, authFileProxyPoolTestResults[pool.id], authFileProxyPoolTestHistory[pool.id])}</option>
             ))}
           </select>
 
@@ -1322,11 +1333,19 @@ function AuthFileImportModal({ open, content, submitting, error, onContentChange
   )
 }
 
-export function ProxyPoolManagerPanel({ rows, pools, loading, error, onSavePool, onDeletePool, onApplyPool }: {
+export function ProxyPoolManagerPanel({ rows, pools, loading, error, testHistory, testResults, testErrors, testingIds, autoTestEnabled, onAutoTestEnabledChange, onTestPool, onTestPools, onSavePool, onDeletePool, onApplyPool }: {
   rows: AuthFileCredentialRow[]
   pools: ProxyPool[]
   loading: boolean
   error: string
+  testHistory: ProxyPoolTestHistoryMap
+  testResults: Record<string, ProxyPoolTestResponse>
+  testErrors: Record<string, string>
+  testingIds: string[]
+  autoTestEnabled: boolean
+  onAutoTestEnabledChange: (enabled: boolean) => void
+  onTestPool: (id: string) => Promise<void>
+  onTestPools: (ids: string[]) => Promise<void>
   onSavePool: (input: Pick<ProxyPool, 'name' | 'proxy_url'>, id?: string) => Promise<void>
   onDeletePool: (id: string) => Promise<void>
   onApplyPool: (names: string[], proxyPoolId: string | null) => Promise<void>
@@ -1337,10 +1356,7 @@ export function ProxyPoolManagerPanel({ rows, pools, loading, error, onSavePool,
   const [poolFormOpen, setPoolFormOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [proxyPoolActionError, setProxyPoolActionError] = useState('')
-  const [testingIds, setTestingIds] = useState<string[]>([])
   const [selectedPoolIds, setSelectedPoolIds] = useState<string[]>([])
-  const [testResults, setTestResults] = useState<Record<string, ProxyPoolTestResponse>>({})
-  const [testErrors, setTestErrors] = useState<Record<string, string>>({})
   const [poolQuery, setPoolQuery] = useState('')
   const [proxyPoolSort, setProxyPoolSort] = useState<ProxyPoolSortState | null>(null)
   const [bindingPool, setBindingPool] = useState<ProxyPool | null>(null)
@@ -1482,36 +1498,8 @@ export function ProxyPoolManagerPanel({ rows, pools, loading, error, onSavePool,
       return Array.from(new Set([...current, ...visiblePoolIds]))
     })
   }
-  const testPool = async (poolId: string) => {
-    setTestingIds((current) => Array.from(new Set([...current, poolId])))
-    setTestErrors((current) => ({ ...current, [poolId]: '' }))
-    try {
-      const result = await testProxyPool(poolId)
-      setTestResults((current) => ({ ...current, [poolId]: result }))
-    } catch (nextError) {
-      setTestErrors((current) => ({ ...current, [poolId]: formatUserActionableError(nextError, '测试代理池失败') }))
-    } finally {
-      setTestingIds((current) => current.filter((id) => id !== poolId))
-    }
-  }
-  const testSelectedPools = async () => {
-    const ids = selectedPoolIds.filter((id) => visiblePoolIds.includes(id))
-    if (ids.length === 0) {
-      return
-    }
-    setTestingIds((current) => Array.from(new Set([...current, ...ids])))
-    setTestErrors((current) => ids.reduce((next, id) => ({ ...next, [id]: '' }), current))
-    await Promise.all(ids.map(async (id) => {
-      try {
-        const result = await testProxyPool(id)
-        setTestResults((current) => ({ ...current, [id]: result }))
-      } catch (nextError) {
-        setTestErrors((current) => ({ ...current, [id]: formatUserActionableError(nextError, '测试代理池失败') }))
-      } finally {
-        setTestingIds((current) => current.filter((item) => item !== id))
-      }
-    }))
-  }
+
+  const testSelectedPools = () => onTestPools(selectedPoolIds.filter((id) => visiblePoolIds.includes(id)))
 
   return (
     <div>
@@ -1525,6 +1513,15 @@ export function ProxyPoolManagerPanel({ rows, pools, loading, error, onSavePool,
           <Button type="button" variant="secondary" size="sm" onClick={() => void testSelectedPools()} disabled={submitting || selectedVisiblePoolCount === 0 || testingIds.length > 0}>
             测试选中
           </Button>
+          <label className={styles.credentialProxyPoolAutoTest}>
+            <input
+              type="checkbox"
+              checked={autoTestEnabled}
+              onChange={(event) => onAutoTestEnabledChange(event.currentTarget.checked)}
+              disabled={loading || visiblePools.length === 0}
+            />
+            <span>自动测试</span>
+          </label>
           <label className={styles.credentialProxyPoolSearch}>
             <IconSearch size={13} />
             <input
@@ -1557,23 +1554,26 @@ export function ProxyPoolManagerPanel({ rows, pools, loading, error, onSavePool,
                 <th>{renderProxyPoolSortButton('latency', '延迟', proxyPoolSort, toggleProxyPoolSort)}</th>
                 <th>{renderProxyPoolSortButton('gpt', 'Gpt延迟', proxyPoolSort, toggleProxyPoolSort)}</th>
                 <th>{renderProxyPoolSortButton('claude', 'Claude延迟', proxyPoolSort, toggleProxyPoolSort)}</th>
+                <th>最后测试</th>
+                <th>稳定性</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={8}><div className={styles.credentialEmptyState}>加载中</div></td>
+                  <td colSpan={10}><div className={styles.credentialEmptyState}>加载中</div></td>
                 </tr>
               )}
               {!loading && visiblePools.length === 0 && (
                 <tr>
-                  <td colSpan={8}><div className={styles.credentialEmptyState}>暂无代理池</div></td>
+                  <td colSpan={10}><div className={styles.credentialEmptyState}>暂无代理池</div></td>
                 </tr>
               )}
               {visiblePools.map((pool) => {
                 const testResult = testResults[pool.id]
                 const rowError = testErrors[pool.id]
+                const testSummary = buildProxyPoolTestSummary(testHistory[pool.id] ?? [])
                 const latency = rowError ? proxyPoolDisplayResult('失败', rowError, '', 'error') : formatProxyPoolLatency(pool, testResult)
                 const gptLatency = formatProxyPoolTargetResult(testResult?.targets?.gpt)
                 const claudeLatency = formatProxyPoolTargetResult(testResult?.targets?.claude)
@@ -1619,9 +1619,18 @@ export function ProxyPoolManagerPanel({ rows, pools, loading, error, onSavePool,
                       {claudeLatency.source && <small className={styles.credentialProxyPoolLatencySource}>{claudeLatency.source}</small>}
                     </td>
                     <td>
+                      <span className={styles.credentialProxyPoolLastTest} title={testSummary.lastCheckedAt}>{formatProxyPoolTestTime(testSummary.lastCheckedAt)}</span>
+                    </td>
+                    <td>
+                      <span className={proxyPoolLatencyClassName(testSummary.stabilityTone)} title={testSummary.sparkline}>{testSummary.stabilityLabel}</span>
+                      <small className={styles.credentialProxyPoolLatencySource}>
+                        {testSummary.successRate === null ? '无历史' : `${testSummary.successRate}% · ${testSummary.trendLabel}`}
+                      </small>
+                    </td>
+                    <td>
                       <div className={styles.credentialPoolActions}>
                         <button type="button" onClick={() => openBindingModal(pool)} disabled={submitting}>绑定认证文件</button>
-                        <button type="button" onClick={() => void testPool(pool.id)} disabled={submitting || testing} title={testing ? '测试中' : '测试'}>
+                        <button type="button" onClick={() => void onTestPool(pool.id)} disabled={submitting || testing} title={testing ? '测试中' : '测试'}>
                           {testing ? <LoadingSpinner size={11} /> : <IconChartLine size={13} />}
                         </button>
                         <button type="button" onClick={() => editPool(pool)} disabled={submitting} title="编辑"><IconSettings size={13} /></button>
@@ -1763,6 +1772,17 @@ type ProxyPoolDisplayResult = {
   tone: ProxyPoolLatencyTone
 }
 
+type ProxyPoolTestSummary = {
+  lastCheckedAt: string
+  successRate: number | null
+  averageLatencyMS: number | null
+  trendLabel: string
+  trendTone: ProxyPoolLatencyTone
+  stabilityLabel: string
+  stabilityTone: ProxyPoolLatencyTone
+  sparkline: string
+}
+
 function proxyPoolDisplayResult(value: string, title: string, source: string, tone: ProxyPoolLatencyTone): ProxyPoolDisplayResult {
   return { value, title, source, tone }
 }
@@ -1786,6 +1806,131 @@ export function formatProxyPoolTargetResult(target?: ProxyPoolTestTargetResult):
     return proxyPoolDisplayResult('失败', target.error || `HTTP ${target.status_code || 0}`, '', 'error')
   }
   return proxyPoolDisplayResult(`${Math.round(target.duration_ms)}ms`, target.url, '最近测试', proxyPoolLatencyTone(target.duration_ms))
+}
+
+export function buildFailedProxyPoolTestResult(error: string): ProxyPoolTestResponse {
+  const failedTarget = { ok: false, duration_ms: 0, status_code: 0, error, url: '' }
+  return {
+    ip: '',
+    address: '',
+    country: '',
+    region: '',
+    city: '',
+    org: '',
+    checked_at: new Date().toISOString(),
+    duration_ms: 0,
+    targets: {
+      latency: failedTarget,
+      gpt: failedTarget,
+      claude: failedTarget,
+    },
+  }
+}
+
+export function buildProxyPoolTestSummary(history: Array<Partial<ProxyPoolTestResponse>>): ProxyPoolTestSummary {
+  const entries = history.filter((entry) => entry.checked_at)
+  const latest = entries.at(-1)
+  const latencyTargets = entries.map((entry) => entry.targets?.latency).filter((target): target is ProxyPoolTestTargetResult => !!target)
+  if (!latest || latencyTargets.length === 0) {
+    return {
+      lastCheckedAt: '',
+      successRate: null,
+      averageLatencyMS: null,
+      trendLabel: '无数据',
+      trendTone: 'muted',
+      stabilityLabel: '待测试',
+      stabilityTone: 'muted',
+      sparkline: '',
+    }
+  }
+  const successTargets = latencyTargets.filter((target) => target.ok && Number.isFinite(target.duration_ms) && target.duration_ms > 0)
+  const successRate = Math.round((successTargets.length / latencyTargets.length) * 100)
+  const averageLatencyMS = successTargets.length > 0
+    ? Math.round(successTargets.reduce((sum, target) => sum + target.duration_ms, 0) / successTargets.length)
+    : null
+  const successfulDurations = successTargets.map((target) => target.duration_ms)
+  const latestTarget = latencyTargets.at(-1)
+  const previousSuccessfulDuration = successfulDurations.at(-2)
+  const latestSuccessfulDuration = latestTarget?.ok && Number.isFinite(latestTarget.duration_ms) && latestTarget.duration_ms > 0 ? latestTarget.duration_ms : null
+  let trendLabel = '无变化'
+  let trendTone: ProxyPoolLatencyTone = 'normal'
+  if (!latestSuccessfulDuration) {
+    trendLabel = '下降'
+    trendTone = 'error'
+  } else if (!previousSuccessfulDuration) {
+    trendLabel = '新增'
+    trendTone = proxyPoolLatencyTone(latestSuccessfulDuration)
+  } else {
+    const diff = latestSuccessfulDuration - previousSuccessfulDuration
+    if (Math.abs(diff) <= 50) {
+      trendLabel = '稳定'
+      trendTone = 'good'
+    } else if (diff < 0) {
+      trendLabel = '改善'
+      trendTone = 'good'
+    } else {
+      trendLabel = '变慢'
+      trendTone = diff > 300 ? 'error' : 'warning'
+    }
+  }
+  const stability = proxyPoolStability(successRate)
+  return {
+    lastCheckedAt: latest.checked_at ?? '',
+    successRate,
+    averageLatencyMS,
+    trendLabel,
+    trendTone,
+    stabilityLabel: stability.label,
+    stabilityTone: stability.tone,
+    sparkline: latencyTargets.map((target) => target.ok && target.duration_ms > 0 ? `${Math.round(target.duration_ms)}` : '失败').join(' -> '),
+  }
+}
+
+function proxyPoolStability(successRate: number): { label: string; tone: ProxyPoolLatencyTone } {
+  if (successRate >= 90) return { label: '稳定', tone: 'good' }
+  if (successRate >= 60) return { label: '一般', tone: 'warning' }
+  if (successRate > 0) return { label: '波动', tone: 'error' }
+  return { label: '不稳定', tone: 'error' }
+}
+
+function formatProxyPoolTestTime(value: string) {
+  if (!value) return '未测试'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return '未知时间'
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(parsed)
+}
+
+export function buildProxyPoolOptionMeta(pool: ProxyPool, testResult?: Partial<ProxyPoolTestResponse>, history: Array<Partial<ProxyPoolTestResponse>> = []) {
+  const boundCount = formatProxyPoolBoundCount(pool.bound_auth_file_count)
+  const latency = formatProxyPoolLatency(pool, testResult)
+  const summary = buildProxyPoolTestSummary(history)
+  const stabilityLabel = summary.successRate === null ? proxyPoolLatencyHealthLabel(latency.tone) : summary.stabilityLabel
+  const parts = [boundCount.count > 0 ? boundCount.label : '未绑定']
+  if (latency.value !== '-') {
+    parts.push(latency.value)
+  } else {
+    parts.push('未测试')
+  }
+  if (stabilityLabel) {
+    parts.push(stabilityLabel)
+  }
+  return parts.join(' · ')
+}
+
+export function buildProxyPoolOptionLabel(pool: ProxyPool, testResult?: Partial<ProxyPoolTestResponse>, history: Array<Partial<ProxyPoolTestResponse>> = []) {
+  return `${pool.name}（${buildProxyPoolOptionMeta(pool, testResult, history)}）`
+}
+
+function proxyPoolLatencyHealthLabel(tone: ProxyPoolLatencyTone) {
+  if (tone === 'good' || tone === 'normal') return '稳定'
+  if (tone === 'warning') return '偏慢'
+  if (tone === 'error') return '异常'
+  return ''
 }
 
 function proxyPoolLatencyTone(durationMS: number): ProxyPoolLatencyTone {
@@ -2634,6 +2779,81 @@ export function persistAuthFileDisplayMode(mode: AuthFileDisplayMode): void {
 
 function isAuthFileDisplayMode(value: string | null | undefined): value is AuthFileDisplayMode {
   return value === 'quota' || value === 'health'
+}
+
+function isProxyPoolTestTargetResult(value: unknown): value is ProxyPoolTestTargetResult {
+  if (!value || typeof value !== 'object') return false
+  const target = value as Partial<ProxyPoolTestTargetResult>
+  return typeof target.ok === 'boolean' && typeof target.duration_ms === 'number' && typeof target.status_code === 'number'
+}
+
+function isProxyPoolTestResponse(value: unknown): value is ProxyPoolTestResponse {
+  if (!value || typeof value !== 'object') return false
+  const response = value as Partial<ProxyPoolTestResponse>
+  const targets = response.targets as Partial<ProxyPoolTestResponse['targets']> | undefined
+  return typeof response.checked_at === 'string' &&
+    typeof response.duration_ms === 'number' &&
+    !!targets &&
+    isProxyPoolTestTargetResult(targets.latency) &&
+    isProxyPoolTestTargetResult(targets.gpt) &&
+    isProxyPoolTestTargetResult(targets.claude)
+}
+
+function normalizeProxyPoolTestHistory(value: unknown): ProxyPoolTestHistoryMap {
+  if (!value || typeof value !== 'object') return {}
+  return Object.entries(value as Record<string, unknown>).reduce<ProxyPoolTestHistoryMap>((next, [poolId, entries]) => {
+    if (!Array.isArray(entries)) return next
+    const validEntries = entries.filter(isProxyPoolTestResponse).slice(-PROXY_POOL_TEST_HISTORY_LIMIT)
+    if (validEntries.length > 0) {
+      next[poolId] = validEntries
+    }
+    return next
+  }, {})
+}
+
+export function readStoredProxyPoolTestHistory(): ProxyPoolTestHistoryMap {
+  if (typeof window === 'undefined') {
+    return {}
+  }
+  try {
+    const rawValue = window.localStorage?.getItem(PROXY_POOL_TEST_HISTORY_STORAGE_KEY)
+    if (!rawValue) return {}
+    return normalizeProxyPoolTestHistory(JSON.parse(rawValue))
+  } catch {
+    return {}
+  }
+}
+
+export function persistProxyPoolTestHistory(history: ProxyPoolTestHistoryMap): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+  try {
+    window.localStorage?.setItem(PROXY_POOL_TEST_HISTORY_STORAGE_KEY, JSON.stringify(history))
+  } catch {
+    // localStorage 不可用时仍保留当前页面内测试结果。
+  }
+}
+
+export function buildProxyPoolTestHistory(current: ProxyPoolTestHistoryMap, poolId: string, result: ProxyPoolTestResponse): ProxyPoolTestHistoryMap {
+  const nextHistory = [
+    ...(current[poolId] ?? []),
+    result,
+  ].slice(-PROXY_POOL_TEST_HISTORY_LIMIT)
+  return {
+    ...current,
+    [poolId]: nextHistory,
+  }
+}
+
+export function readProxyPoolTestHistory(history: ProxyPoolTestHistoryMap): Record<string, ProxyPoolTestResponse> {
+  return Object.entries(history).reduce<Record<string, ProxyPoolTestResponse>>((next, [poolId, entries]) => {
+    const latest = entries.at(-1)
+    if (latest) {
+      next[poolId] = latest
+    }
+    return next
+  }, {})
 }
 
 export function AuthFileQuotaPanel({ row, quotaUsageMode }: { row: AuthFileCredentialRow; quotaUsageMode: QuotaUsageMode }) {

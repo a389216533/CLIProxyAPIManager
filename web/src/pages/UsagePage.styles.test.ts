@@ -376,12 +376,12 @@ describe('UsagePage toolbar styles', () => {
   })
 
   it('preserves the original desktop toolbar sizing while isolating refresh layout', () => {
-    expect(usagePageStyles).toMatch(/\.container\s*\{[\s\S]*?padding:\s*18px 24px 28px;/)
+    expect(usagePageStyles).toMatch(/\.container\s*\{[\s\S]*?padding:\s*16px 22px 26px;/)
     expect(usagePageSource).toMatch(/\{showRangeControls && \(\s*<div className=\{styles\.toolbarRow\}>/)
     expect(usagePageStyles).toMatch(/\.toolbarRow\s*\{[\s\S]*?position:\s*sticky;/)
-    expect(usagePageStyles).toMatch(/\.toolbarRow\s*\{[\s\S]*?top:\s*64px;/)
-    expect(usagePageStyles).toMatch(/\.toolbarRow\s*\{[\s\S]*?margin:\s*0 -24px;/)
-    expect(usagePageStyles).toMatch(/\.toolbarRow\s*\{[\s\S]*?padding:\s*12px 24px;/)
+    expect(usagePageStyles).toMatch(/\.toolbarRow\s*\{[\s\S]*?top:\s*56px;/)
+    expect(usagePageStyles).toMatch(/\.toolbarRow\s*\{[\s\S]*?margin:\s*0 -22px;/)
+    expect(usagePageStyles).toMatch(/\.toolbarRow\s*\{[\s\S]*?padding:\s*10px 22px;/)
     expect(usagePageStyles).toMatch(/\.toolbarActionsRight\s*\{[\s\S]*?align-items:\s*center;/)
     expect(usagePageStyles).toMatch(/\.usageFilterBar\s*\{[\s\S]*?align-items:\s*center;/)
     expect(usagePageStyles).toMatch(/\.usageFilterBar\s*\{[\s\S]*?flex:\s*1 1 auto;/)
@@ -463,15 +463,15 @@ describe('UsagePage toolbar styles', () => {
   it('aligns Request Event Log pagination with credential pagination height', () => {
     expect(usagePageStyles).toMatch(/\.requestEventsCard:global\(\.card\)\s*\{[\s\S]*?padding:\s*0;/)
     expect(requestEventsSource).toContain('className={styles.requestEventsCard}')
-    expect(usagePageStyles).toMatch(/\.requestEventsPaginationFooter\s*\{[\s\S]*?--usage-pagination-bar-height:\s*51px;/)
+    expect(usagePageStyles).toMatch(/\.requestEventsPaginationFooter\s*\{[\s\S]*?--usage-pagination-bar-height:\s*45px;/)
     expect(usagePageStyles).toMatch(/\.requestEventsPaginationFooter\s*\{[\s\S]*?height:\s*var\(--usage-pagination-bar-height\);/)
     expect(usagePageStyles).toMatch(/\.requestEventsPaginationFooter\s*\{[\s\S]*?box-sizing:\s*border-box;/)
     expect(usagePageStyles).toMatch(/\.requestEventsPaginationFooter\s*\{[\s\S]*?align-items:\s*center;/)
-    expect(usagePageStyles).toMatch(/\.requestEventsPaginationFooter\s*\{[\s\S]*?padding:\s*0 22px;/)
+    expect(usagePageStyles).toMatch(/\.requestEventsPaginationFooter\s*\{[\s\S]*?padding:\s*0 18px;/)
   })
 
   it('keeps Request Event Log headers visible while the table scrolls', () => {
-    expect(usagePageStyles).toMatch(/\.requestEventsTableWrapper\s*\{[\s\S]*?height:\s*clamp\(520px,\s*68vh,\s*760px\);/)
+    expect(usagePageStyles).toMatch(/\.requestEventsTableWrapper\s*\{[\s\S]*?height:\s*clamp\(540px,\s*70vh,\s*800px\);/)
     expect(usagePageStyles).toMatch(/\.requestEventsTableWrapper\s*\{[\s\S]*?overflow:\s*auto;/)
     expect(usagePageStyles).toMatch(/\.requestEventsTableWrapper\s*\{[\s\S]*?thead\s+th\s*\{[\s\S]*?position:\s*sticky;/)
     expect(usagePageStyles).toMatch(/\.requestEventsTableWrapper\s*\{[\s\S]*?thead\s+th\s*\{[\s\S]*?top:\s*0;/)
@@ -487,9 +487,15 @@ describe('UsagePage toolbar styles', () => {
   })
 
   it('keeps global card hover visually stable without primary outlines or movement', () => {
-    expect(componentStyles).toMatch(/\.card\s*\{[\s\S]*?&:hover\s*\{[\s\S]*?border-color:\s*var\(--glass-border, var\(--border-color\)\);/)
-    expect(componentStyles).toMatch(/\.card\s*\{[\s\S]*?&:hover\s*\{[\s\S]*?transform:\s*none;/)
-    expect(componentStyles).toMatch(/\.card\s*\{[\s\S]*?&:hover\s*\{[\s\S]*?box-shadow:\s*var\(--shadow-lg\);/)
+    const cardBlock = componentStyles.slice(
+      componentStyles.indexOf('.card {'),
+      componentStyles.indexOf('.card-header')
+    )
+
+    expect(cardBlock).toMatch(/background-color:\s*var\(--bg-primary\);/)
+    expect(cardBlock).toMatch(/&:hover\s*\{[\s\S]*?border-color:\s*var\(--border-primary\);/)
+    expect(cardBlock).toMatch(/&:hover\s*\{[\s\S]*?box-shadow:\s*var\(--shadow\);/)
+    expect(cardBlock).not.toMatch(/transform:/)
     expect(componentStyles).not.toContain('box-shadow: var(--shadow-lg), 0 8px 24px color-mix(in srgb, var(--primary-color) 12%, transparent);')
   })
 
@@ -577,8 +583,8 @@ describe('UsagePage toolbar styles', () => {
   })
 
   it('provides reusable pill controls for usage subpages', () => {
-    expect(usagePageStyles).toMatch(/\.usagePillControl\s*\{[\s\S]*?border-radius:\s*999px;/)
-    expect(usagePageStyles).toMatch(/\.usagePillAction\s*\{[\s\S]*?border-radius:\s*999px;/)
+    expect(usagePageStyles).toMatch(/\.usagePillControl\s*\{[\s\S]*?border-radius:\s*8px;/)
+    expect(usagePageStyles).toMatch(/\.usagePillAction\s*\{[\s\S]*?border-radius:\s*6px;/)
     expect(usagePageStyles).toMatch(/\.usagePillActionDanger\s*\{[\s\S]*?color:/)
     expect(usagePageStyles).not.toContain('&:global(.btn-danger):hover:not(:disabled)')
     expect(usagePageStyles).toMatch(/:global\(\.input\)\s*\{[^}]*border-radius:\s*999px;/)
@@ -606,16 +612,16 @@ describe('UsagePage toolbar styles', () => {
     expect(requestEventsSource).toContain('styles.requestEventsExportButton')
     expect(requestEventsSource).toContain('styles.requestEventsExportButtonInner')
     expect(requestEventsSource).toContain('<IconDownload size={12} aria-hidden="true" />')
-    expect(exportMenuBlock).toMatch(/min-height:\s*42px;/)
-    expect(exportMenuBlock).toMatch(/padding:\s*4px;/)
+    expect(exportMenuBlock).toMatch(/min-height:\s*36px;/)
+    expect(exportMenuBlock).toMatch(/padding:\s*3px;/)
     expect(exportMenuBlock).toMatch(/align-items:\s*center;/)
     expect(exportMenuBlock).not.toMatch(/padding-bottom:\s*6px;/)
     expect(exportMenuBlock).not.toMatch(/margin-bottom:\s*-6px;/)
     expect(exportMenuBlock).toContain('&::after')
-    expect(exportMenuBlock).toMatch(/border-radius:\s*999px;/)
+    expect(exportMenuBlock).toMatch(/border-radius:\s*8px;/)
     expect(exportButtonBlock).toMatch(/border:\s*0;/)
     expect(exportButtonBlock).toMatch(/background:\s*var\(--bg-primary\);/)
-    expect(exportButtonBlock).toMatch(/box-shadow:\s*0 8px 20px rgba\(0,\s*0,\s*0,\s*0\.1\);/)
+    expect(exportButtonBlock).toMatch(/box-shadow:\s*0 1px 2px rgb\(15 23 42 \/ 0\.06\);/)
     expect(exportDropdownBlock).toMatch(/top:\s*calc\(100% \+ 6px\);/)
   })
 

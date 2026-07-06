@@ -16,6 +16,14 @@ export function UsageProxyPoolsTab({ credentialsData }: UsageProxyPoolsTabProps)
           pools={credentialsData.proxyPools}
           loading={credentialsData.proxyPoolsLoading}
           error={credentialsData.proxyPoolsError}
+          testHistory={credentialsData.proxyPoolTestHistory}
+          testResults={credentialsData.proxyPoolTestResults}
+          testErrors={credentialsData.proxyPoolTestErrors}
+          testingIds={credentialsData.proxyPoolTestingIds}
+          autoTestEnabled={credentialsData.proxyPoolAutoTestEnabled}
+          onAutoTestEnabledChange={credentialsData.setProxyPoolAutoTestEnabled}
+          onTestPool={credentialsData.testProxyPoolById}
+          onTestPools={credentialsData.testProxyPoolsByIds}
           onSavePool={credentialsData.saveProxyPool}
           onDeletePool={credentialsData.removeProxyPool}
           onApplyPool={credentialsData.applyProxyPoolToAuthFiles}

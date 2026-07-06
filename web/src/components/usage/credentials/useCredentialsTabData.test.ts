@@ -8,6 +8,7 @@ import { buildQuotaRefreshSubmissionUpdate, buildQuotaRefreshTaskErrorUpdate } f
 import type { UsageIdentity } from '@/lib/types'
 
 const credentialsTabDataSource = readFileSync(new URL('./useCredentialsTabData.ts', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+const authFileCredentialsSectionSource = readFileSync(new URL('./AuthFileCredentialsSection.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const quotaCacheSource = readFileSync(new URL('./useQuotaCache.ts', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 
 describe('Credentials polling intervals', () => {
@@ -58,6 +59,13 @@ describe('Credentials quota inspection cache refresh', () => {
 
   it('refreshes proxy pools after changing auth file proxy bindings', () => {
     expect(credentialsTabDataSource).toMatch(/await setAuthFilesProxyURL\(names, proxyURL\)[\s\S]*refreshCredentialPages\(\)[\s\S]*refreshProxyPools\(\)/)
+  })
+
+  it('runs proxy pool auto tests from the credentials data hook instead of the proxy pool panel', () => {
+    expect(credentialsTabDataSource).toContain('PROXY_POOL_AUTO_TEST_INTERVAL_MS')
+    expect(credentialsTabDataSource).toContain('window.setInterval')
+    expect(credentialsTabDataSource).toContain('void testProxyPoolsByIds(proxyPools.map((pool) => pool.id))')
+    expect(authFileCredentialsSectionSource).not.toContain('window.setInterval')
   })
 
   it('lets completed cache quota clear stale row refresh failures after inspection', () => {

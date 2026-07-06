@@ -9,13 +9,14 @@ import {
 import { useCredentialPages } from './useCredentialPages'
 import { useQuotaCache } from './useQuotaCache'
 import { useQuotaInspection } from './useQuotaInspection'
-import { ApiError, createProxyPool, deleteProxyPool, fetchAuthFileCooldowns, fetchProxyPools, resetUsageQuota, restoreAuthFileCooldown, setAuthFilesNote, setAuthFilesProxyURL, startAuthFileCooldown, updateProxyPool, updateUsageIdentityAlias, type UsageIdentityPageSort } from '@/lib/api'
+import { ApiError, createProxyPool, deleteProxyPool, fetchAuthFileCooldowns, fetchProxyPools, resetUsageQuota, restoreAuthFileCooldown, setAuthFilesNote, setAuthFilesProxyURL, startAuthFileCooldown, testProxyPool, updateProxyPool, updateUsageIdentityAlias, type UsageIdentityPageSort } from '@/lib/api'
 import { formatUserActionableError } from '@/lib/errorMessages'
 import i18n from '@/i18n'
-import type { AuthFileCooldown, ProxyPool, UsageIdentityTypeCount, UsageQuotaCheckResponse, UsageQuotaInspectionStatusResponse } from '@/lib/types'
+import type { AuthFileCooldown, ProxyPool, ProxyPoolTestResponse, UsageIdentityTypeCount, UsageQuotaCheckResponse, UsageQuotaInspectionStatusResponse } from '@/lib/types'
 import { scheduleEffectTask } from '@/utils/effects'
 import { quotaRefreshDisplayError, useQuotaRefreshTasks, type QuotaState } from './useQuotaRefreshTasks'
 import type { CredentialProviderFilterKey } from './credentialProviderFilters'
+import { buildFailedProxyPoolTestResult, buildProxyPoolTestHistory, persistProxyPoolTestHistory, readProxyPoolTestHistory, readStoredProxyPoolTestHistory, type ProxyPoolTestHistoryMap } from './AuthFileCredentialsSection'
 
 type CredentialQuotaState = Pick<AuthFileCredentialRow, 'quotaLoading' | 'quotaError' | 'refreshStatus' | 'quotaResetting'>
 
@@ -29,6 +30,31 @@ interface UseCredentialsTabDataOptions {
   quotaAutoRefreshEnabled: boolean
   onAuthRequired?: () => void
   onNotice?: (kind: 'success' | 'info' | 'error', message: string) => void
+}
+
+const PROXY_POOL_AUTO_TEST_STORAGE_KEY = 'cpa.proxyPools.autoTest.enabled.v1'
+export const PROXY_POOL_AUTO_TEST_INTERVAL_MS = 5 * 60 * 1000
+
+function readStoredProxyPoolAutoTestEnabled(): boolean {
+  if (typeof window === 'undefined') {
+    return false
+  }
+  try {
+    return window.localStorage?.getItem(PROXY_POOL_AUTO_TEST_STORAGE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function persistProxyPoolAutoTestEnabled(enabled: boolean): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+  try {
+    window.localStorage?.setItem(PROXY_POOL_AUTO_TEST_STORAGE_KEY, enabled ? '1' : '0')
+  } catch {
+    // localStorage 不可用时仍保留本次页面内开关状态。
+  }
 }
 
 export interface CredentialsTabData {
@@ -51,6 +77,11 @@ export interface CredentialsTabData {
   proxyPools: ProxyPool[]
   proxyPoolsLoading: boolean
   proxyPoolsError: string
+  proxyPoolTestHistory: ProxyPoolTestHistoryMap
+  proxyPoolTestResults: Record<string, ProxyPoolTestResponse>
+  proxyPoolTestErrors: Record<string, string>
+  proxyPoolTestingIds: string[]
+  proxyPoolAutoTestEnabled: boolean
   aiProviderProviderFilter: CredentialProviderFilterKey
   authFileSort: UsageIdentityPageSort
   aiProviderSort: UsageIdentityPageSort
@@ -78,6 +109,9 @@ export interface CredentialsTabData {
   aliasSavingId: string
   refresh: () => Promise<void>
   refreshProxyPools: () => Promise<void>
+  setProxyPoolAutoTestEnabled: (enabled: boolean) => void
+  testProxyPoolById: (id: string) => Promise<void>
+  testProxyPoolsByIds: (ids: string[]) => Promise<void>
   saveProxyPool: (input: Pick<ProxyPool, 'name' | 'proxy_url'>, id?: string) => Promise<void>
   removeProxyPool: (id: string) => Promise<void>
   applyProxyPoolToAuthFiles: (names: string[], proxyPoolId: string | null) => Promise<void>
@@ -96,12 +130,18 @@ export function useCredentialsTabData({ enabledAuthFiles, enabledAiProviders, qu
   const [proxyPools, setProxyPools] = useState<ProxyPool[]>([])
   const [proxyPoolsLoading, setProxyPoolsLoading] = useState(false)
   const [proxyPoolsError, setProxyPoolsError] = useState('')
+  const [proxyPoolTestHistory, setProxyPoolTestHistory] = useState<ProxyPoolTestHistoryMap>(() => readStoredProxyPoolTestHistory())
+  const [proxyPoolTestErrors, setProxyPoolTestErrors] = useState<Record<string, string>>({})
+  const [proxyPoolTestingIds, setProxyPoolTestingIds] = useState<string[]>([])
+  const [proxyPoolAutoTestEnabled, setProxyPoolAutoTestEnabledState] = useState(() => readStoredProxyPoolAutoTestEnabled())
   const [authFileCooldownsByAuthIndex, setAuthFileCooldownsByAuthIndex] = useState<Record<string, AuthFileCooldown>>({})
   const [authFileCooldownsLoading, setAuthFileCooldownsLoading] = useState(false)
   const [authFileCooldownsError, setAuthFileCooldownsError] = useState('')
   const [authFileProxyPoolFilterId, setAuthFileProxyPoolFilterIdState] = useState('')
   const selectedProxyPool = useMemo(() => proxyPools.find((pool) => pool.id === authFileProxyPoolFilterId), [authFileProxyPoolFilterId, proxyPools])
   const authFileProxyURLs = useMemo(() => (selectedProxyPool ? [selectedProxyPool.proxy_url] : []), [selectedProxyPool])
+  const proxyPoolsDataEnabled = enabledAuthFiles || proxyPoolAutoTestEnabled
+  const proxyPoolTestResults = useMemo(() => readProxyPoolTestHistory(proxyPoolTestHistory), [proxyPoolTestHistory])
   const credentialPages = useCredentialPages({ enabledAuthFiles, enabledAiProviders, authFileProxyURLs, onAuthRequired })
   const currentAuthIndexes = useMemo(
     () => selectQuotaEligibleAuthIndexes(credentialPages.authFileIdentities),
@@ -128,7 +168,7 @@ export function useCredentialsTabData({ enabledAuthFiles, enabledAiProviders, qu
   })
 
   const refreshProxyPools = useCallback(async () => {
-    if (!enabledAuthFiles) {
+    if (!proxyPoolsDataEnabled) {
       return
     }
     setProxyPoolsLoading(true)
@@ -147,13 +187,66 @@ export function useCredentialsTabData({ enabledAuthFiles, enabledAiProviders, qu
     } finally {
       setProxyPoolsLoading(false)
     }
-  }, [enabledAuthFiles, onAuthRequired])
+  }, [onAuthRequired, proxyPoolsDataEnabled])
 
   useEffect(() => {
     return scheduleEffectTask(() => {
       void refreshProxyPools()
     })
   }, [refreshProxyPools])
+
+  const appendProxyPoolTestHistory = useCallback((poolId: string, result: ProxyPoolTestResponse) => {
+    setProxyPoolTestHistory((current) => {
+      const next = buildProxyPoolTestHistory(current, poolId, result)
+      persistProxyPoolTestHistory(next)
+      return next
+    })
+  }, [])
+
+  const testProxyPoolsByIds = useCallback(async (ids: string[]) => {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)))
+    if (uniqueIds.length === 0) {
+      return
+    }
+    setProxyPoolTestingIds((current) => Array.from(new Set([...current, ...uniqueIds])))
+    setProxyPoolTestErrors((current) => uniqueIds.reduce((next, id) => ({ ...next, [id]: '' }), current))
+    await Promise.all(uniqueIds.map(async (id) => {
+      try {
+        const result = await testProxyPool(id)
+        appendProxyPoolTestHistory(id, result)
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          if (onAuthRequired) {
+            onAuthRequired()
+          }
+        }
+        const message = formatUserActionableError(error, '测试代理池失败')
+        setProxyPoolTestErrors((current) => ({ ...current, [id]: message }))
+        appendProxyPoolTestHistory(id, buildFailedProxyPoolTestResult(message))
+      } finally {
+        setProxyPoolTestingIds((current) => current.filter((item) => item !== id))
+      }
+    }))
+  }, [appendProxyPoolTestHistory, onAuthRequired])
+
+  const testProxyPoolById = useCallback(async (id: string) => {
+    await testProxyPoolsByIds([id])
+  }, [testProxyPoolsByIds])
+
+  const setProxyPoolAutoTestEnabled = useCallback((enabled: boolean) => {
+    setProxyPoolAutoTestEnabledState(enabled)
+    persistProxyPoolAutoTestEnabled(enabled)
+  }, [])
+
+  useEffect(() => {
+    if (!proxyPoolAutoTestEnabled || proxyPools.length === 0) {
+      return undefined
+    }
+    const intervalID = window.setInterval(() => {
+      void testProxyPoolsByIds(proxyPools.map((pool) => pool.id))
+    }, PROXY_POOL_AUTO_TEST_INTERVAL_MS)
+    return () => window.clearInterval(intervalID)
+  }, [proxyPoolAutoTestEnabled, proxyPools, testProxyPoolsByIds])
 
   const refreshAuthFileCooldowns = useCallback(async () => {
     if (!enabledAuthFiles) {
@@ -379,6 +472,11 @@ export function useCredentialsTabData({ enabledAuthFiles, enabledAiProviders, qu
     proxyPools,
     proxyPoolsLoading,
     proxyPoolsError,
+    proxyPoolTestHistory,
+    proxyPoolTestResults,
+    proxyPoolTestErrors,
+    proxyPoolTestingIds,
+    proxyPoolAutoTestEnabled,
     aiProviderProviderFilter: credentialPages.aiProviderProviderFilter,
     authFileSort: credentialPages.authFileSort,
     authFileQuery: credentialPages.authFileQuery,
@@ -407,6 +505,9 @@ export function useCredentialsTabData({ enabledAuthFiles, enabledAiProviders, qu
     aliasSavingId,
     refresh: refresh,
     refreshProxyPools,
+    setProxyPoolAutoTestEnabled,
+    testProxyPoolById,
+    testProxyPoolsByIds,
     saveProxyPool,
     removeProxyPool,
     applyProxyPoolToAuthFiles,

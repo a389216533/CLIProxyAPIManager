@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { AuthFileCredentialsSection, AuthFileQuotaPanel, INSPECTION_RESULT_PAGE_SIZE_OPTIONS, ProxyPoolManagerPanel, authFileDeleteName, buildInspectionResultsPage, buildInvalidInspectionAccountFileNames, formatInspectionCompletedAt, formatInspectionProgressPercent, formatProxyPoolTargetResult, formatQuotaErrorDisplay, formatQuotaResetDuration, formatQuotaResetLabel, formatQuotaWindowUsageAriaLabel, inspectionIndicatorTone, invertInvalidInspectionAccountFileNames, isInspectionStartDisabled, isSelectableInspectionStatusFilter, nextInspectionResultStatusFilter, persistAuthFileDisplayMode, readStoredAuthFileDisplayMode, selectAllInvalidInspectionAccountFileNames, sortProxyPoolBindingRows, sortProxyPoolsForDisplay } from './AuthFileCredentialsSection'
+import { AuthFileCredentialsSection, AuthFileQuotaPanel, INSPECTION_RESULT_PAGE_SIZE_OPTIONS, PROXY_POOL_TEST_HISTORY_LIMIT, ProxyPoolManagerPanel, authFileDeleteName, buildInspectionResultsPage, buildInvalidInspectionAccountFileNames, buildProxyPoolOptionLabel, buildProxyPoolOptionMeta, buildProxyPoolTestHistory, buildProxyPoolTestSummary, formatInspectionCompletedAt, formatInspectionProgressPercent, formatProxyPoolTargetResult, formatQuotaErrorDisplay, formatQuotaResetDuration, formatQuotaResetLabel, formatQuotaWindowUsageAriaLabel, inspectionIndicatorTone, invertInvalidInspectionAccountFileNames, isInspectionStartDisabled, isSelectableInspectionStatusFilter, nextInspectionResultStatusFilter, persistAuthFileDisplayMode, readProxyPoolTestHistory, readStoredAuthFileDisplayMode, selectAllInvalidInspectionAccountFileNames, sortProxyPoolBindingRows, sortProxyPoolsForDisplay } from './AuthFileCredentialsSection'
 import type { AuthFileCredentialRow, DisplayQuota } from './credentialViewModels'
 import type { UsageQuotaInspectionResult, UsageQuotaInspectionResultStatus } from '@/lib/types'
 
@@ -226,6 +226,28 @@ describe('AuthFileCredentialsSection title', () => {
     expect(html).toContain('代理: Proxy A')
   })
 
+  it('shows binding count and latency context when choosing proxy pools for auth files', () => {
+    const pool = {
+      id: 'pool-1',
+      name: 'Proxy A',
+      proxy_url: 'socks5://127.0.0.1:1080',
+      bound_auth_file_count: 3,
+      average_latency_ms: 238,
+      latency_source: 'recent_usage',
+      created_at: '',
+      updated_at: '',
+    }
+
+    expect(buildProxyPoolOptionMeta(pool)).toBe('已绑定 3 个 · 238ms · 稳定')
+    expect(buildProxyPoolOptionLabel(pool)).toBe('Proxy A（已绑定 3 个 · 238ms · 稳定）')
+
+    const html = renderToStaticMarkup(createElement(AuthFileCredentialsSection, createAuthFileSectionProps({
+      proxyPools: [pool],
+    })))
+
+    expect(html).toContain('Proxy A（已绑定 3 个 · 238ms · 稳定）')
+  })
+
   it('renders a copy email button for auth file email display names', () => {
     const emailRow = {
       identity: { id: '1', identity: 'auth-1', file_name: 'codex-user.json', is_deleted: false },
@@ -345,6 +367,14 @@ describe('AuthFileCredentialsSection title', () => {
       }],
       loading: false,
       error: '',
+      testHistory: {},
+      testResults: {},
+      testErrors: {},
+      testingIds: [],
+      autoTestEnabled: false,
+      onAutoTestEnabledChange: () => undefined,
+      onTestPool: async () => undefined,
+      onTestPools: async () => undefined,
       onSavePool: async () => undefined,
       onDeletePool: async () => undefined,
       onApplyPool: async () => undefined,
@@ -409,6 +439,47 @@ describe('AuthFileCredentialsSection title', () => {
 
     expect(sortProxyPoolsForDisplay(pools, testResults, { key: 'latency', direction: 'asc' }).map((pool) => pool.id)).toEqual(['b', 'a', 'c'])
     expect(sortProxyPoolsForDisplay(pools, testResults, { key: 'gpt', direction: 'desc' }).map((pool) => pool.id)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('keeps only recent proxy pool test history and restores the latest result', () => {
+    const result = {
+      ip: '1.1.1.1',
+      address: '',
+      country: '',
+      region: '',
+      city: '',
+      org: '',
+      checked_at: '2026-07-04T10:00:00Z',
+      duration_ms: 120,
+      targets: {
+        latency: { ok: true, duration_ms: 120, status_code: 204, error: '', url: '' },
+        gpt: { ok: true, duration_ms: 260, status_code: 200, error: '', url: '' },
+        claude: { ok: false, duration_ms: 0, status_code: 503, error: 'timeout', url: '' },
+      },
+    }
+    const history = Array.from({ length: PROXY_POOL_TEST_HISTORY_LIMIT + 2 }).reduce((current, _, index) => buildProxyPoolTestHistory(current, 'pool-1', {
+      ...result,
+      checked_at: `2026-07-04T10:${String(index).padStart(2, '0')}:00Z`,
+    }), {})
+
+    expect(history['pool-1']).toHaveLength(PROXY_POOL_TEST_HISTORY_LIMIT)
+    expect(readProxyPoolTestHistory(history)['pool-1']?.checked_at).toBe('2026-07-04T10:21:00Z')
+  })
+
+  it('summarizes proxy pool stability and latency trend from test history', () => {
+    const history = [
+      { checked_at: '2026-07-04T10:00:00Z', targets: { latency: { ok: true, duration_ms: 300, status_code: 204, error: '', url: '' }, gpt: { ok: true, duration_ms: 400, status_code: 200, error: '', url: '' }, claude: { ok: true, duration_ms: 500, status_code: 200, error: '', url: '' } } },
+      { checked_at: '2026-07-04T10:05:00Z', targets: { latency: { ok: true, duration_ms: 180, status_code: 204, error: '', url: '' }, gpt: { ok: true, duration_ms: 280, status_code: 200, error: '', url: '' }, claude: { ok: false, duration_ms: 0, status_code: 503, error: 'timeout', url: '' } } },
+      { checked_at: '2026-07-04T10:10:00Z', targets: { latency: { ok: false, duration_ms: 0, status_code: 503, error: 'timeout', url: '' }, gpt: { ok: false, duration_ms: 0, status_code: 503, error: 'timeout', url: '' }, claude: { ok: false, duration_ms: 0, status_code: 503, error: 'timeout', url: '' } } },
+    ]
+
+    const summary = buildProxyPoolTestSummary(history)
+
+    expect(summary.lastCheckedAt).toBe('2026-07-04T10:10:00Z')
+    expect(summary.successRate).toBe(67)
+    expect(summary.trendLabel).toBe('下降')
+    expect(summary.stabilityLabel).toBe('一般')
+    expect(summary.sparkline).toBe('300 -> 180 -> 失败')
   })
 
   it('sorts proxy pool binding rows by account or current proxy', () => {
