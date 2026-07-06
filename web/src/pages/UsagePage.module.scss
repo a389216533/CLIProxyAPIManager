@@ -239,13 +239,12 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 18px;
-  min-height: 64px;
-  padding: 10px 22px;
+  gap: 16px;
+  min-height: 56px;
+  padding: 8px 22px;
   border-bottom: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--bg-primary) 94%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: var(--bg-primary);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
 
   @include mobile {
     position: static;
@@ -258,7 +257,7 @@
 .topBarMeta {
   display: inline-flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -278,8 +277,8 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 30px;
-  padding: 0 12px;
+  min-height: 28px;
+  padding: 0 10px;
   border: 1px solid rgba(16, 185, 129, 0.24);
   border-radius: 6px;
   background: rgba(16, 185, 129, 0.09);
@@ -314,15 +313,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 42px;
-  padding: 0 20px;
-  border-radius: 999px;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
   border: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--primary-color) 8%, var(--bg-primary));
+  background: var(--bg-primary);
   color: var(--text-primary);
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -368,12 +367,11 @@
   display: inline-flex;
   align-items: stretch;
   gap: 4px;
-  min-height: 42px;
-  padding: 4px;
-  border-radius: 999px;
+  min-height: 36px;
+  padding: 3px;
+  border-radius: 8px;
   border: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--bg-secondary) 78%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: var(--bg-secondary);
 }
 
 .themePill {
@@ -383,8 +381,8 @@
   font: inherit;
   font-size: 12px;
   font-weight: 600;
-  padding: 8px 12px;
-  border-radius: 999px;
+  padding: 6px 10px;
+  border-radius: 6px;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 
@@ -401,7 +399,7 @@
 .themePillActive {
   background: var(--bg-primary);
   color: var(--text-primary);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
 }
 
 .updateCheckSwitcher,
@@ -409,12 +407,11 @@
 .refreshSwitcher {
   display: inline-flex;
   align-items: stretch;
-  min-height: 42px;
-  padding: 4px;
-  border-radius: 999px;
+  min-height: 36px;
+  padding: 3px;
+  border-radius: 8px;
   border: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--bg-secondary) 78%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: var(--bg-secondary);
 }
 
 .updateCheckPill,
@@ -426,8 +423,8 @@
   font: inherit;
   font-size: 12px;
   font-weight: 600;
-  padding: 8px 12px;
-  border-radius: 999px;
+  padding: 6px 10px;
+  border-radius: 6px;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 
@@ -453,7 +450,7 @@
 .refreshPillLoading {
   background: var(--bg-primary);
   color: var(--text-primary);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
 }
 
 .updateCheckPillInner,
@@ -483,11 +480,10 @@
 
 // Usage 子页面统一复用这组 pill 控件，避免每个卡片单独维护按钮/输入框圆角。
 .usagePillControl {
-  min-height: 40px;
-  border-radius: 999px;
+  min-height: 36px;
+  border-radius: 8px;
   border-color: var(--border-color);
-  background: color-mix(in srgb, var(--bg-primary) 86%, transparent);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  background: var(--bg-primary);
 
   &:focus,
   &:focus-visible {
@@ -497,34 +493,32 @@
   }
 
   > button {
-    min-height: 40px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--bg-primary) 86%, transparent);
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+    min-height: 36px;
+    border-radius: 8px;
+    background: var(--bg-primary);
   }
 }
 
 .usagePillShell {
   display: inline-flex;
   align-items: stretch;
-  min-height: 40px;
-  padding: 4px;
-  border-radius: 999px;
+  min-height: 36px;
+  padding: 3px;
+  border-radius: 8px;
   border: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--bg-secondary) 78%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: var(--bg-secondary);
 }
 
 .usagePillAction {
-  min-height: 32px;
-  border-radius: 999px;
-  padding: 7px 12px;
+  min-height: 30px;
+  border-radius: 6px;
+  padding: 6px 10px;
   font-size: 12px;
   font-weight: 700;
   transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 
   &:global(.btn) {
-    border-radius: 999px;
+    border-radius: 6px;
   }
 
   > span:not(:global(.loading-spinner)) {
@@ -541,7 +535,7 @@
   }
 
   &:global(.btn-primary) {
-    box-shadow: 0 8px 20px rgba($primary-color, 0.18);
+    box-shadow: none;
   }
 
   &:global(.btn-secondary),
@@ -549,11 +543,11 @@
     border-color: var(--border-color);
     background: var(--bg-primary);
     color: var(--text-primary);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+    box-shadow: none;
   }
 
   &:hover:not(:disabled) {
-    transform: translateY(-1px);
+    border-color: var(--border-hover);
   }
 }
 
@@ -582,9 +576,9 @@
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   position: relative;
-  padding: 18px 24px 28px;
+  padding: 16px 22px 26px;
 }
 
 .toolbarMetaRow {
@@ -608,20 +602,19 @@
 .backToCpaSwitcher {
   display: inline-flex;
   align-items: stretch;
-  min-height: 42px;
-  padding: 4px;
-  border-radius: 999px;
+  min-height: 36px;
+  padding: 3px;
+  border-radius: 8px;
   border: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--bg-secondary) 78%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: var(--bg-secondary);
 }
 
 .backToCpaLink {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 8px 12px;
-  border-radius: 999px;
+  padding: 6px 10px;
+  border-radius: 6px;
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 600;
@@ -631,7 +624,7 @@
   &:hover {
     color: var(--text-primary);
     background: var(--bg-primary);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
   }
 
   &:focus-visible {
@@ -660,18 +653,16 @@
 
 .toolbarRow {
   position: sticky;
-  top: 64px;
+  top: 56px;
   z-index: 8;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 0;
-  margin: 0 -24px;
-  padding: 12px 24px;
+  margin: 0 -22px;
+  padding: 10px 22px;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
-  background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: var(--bg-secondary);
 }
 
 .tabBar {
@@ -1732,7 +1723,7 @@
 
 .statsGrid {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   grid-template-columns: repeat(12, minmax(0, 1fr));
 
   @include mobile {
@@ -1747,19 +1738,16 @@
 
   grid-column: span 3;
   position: relative;
-  padding: 12px 14px;
-  background:
-    radial-gradient(120% 140% at 12% 0%, var(--accent-soft) 0%, rgba(0, 0, 0, 0) 62%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0)), var(--bg-primary);
-  border-radius: $radius-lg;
+  padding: 13px 14px;
+  background: var(--bg-primary);
+  border-radius: $radius-md;
   border: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-height: 112px;
-  box-shadow: var(--shadow-lg);
+  min-height: 104px;
+  box-shadow: var(--shadow);
   transition:
-    transform $transition-fast,
     box-shadow $transition-fast,
     border-color $transition-fast;
   overflow: hidden;
@@ -1769,16 +1757,16 @@
     position: absolute;
     top: 0;
     left: 0;
-    height: 3px;
-    width: 100%;
-    background: linear-gradient(90deg, var(--accent), rgba(0, 0, 0, 0));
-    opacity: 0.95;
+    bottom: 0;
+    height: auto;
+    width: 3px;
+    background: var(--accent);
+    opacity: 0.72;
   }
 
   &:hover {
-    transform: translateY(-2px);
     border-color: var(--accent-border);
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.22);
+    box-shadow: var(--shadow);
   }
 
   @include tablet {
@@ -1810,11 +1798,11 @@
   border-radius: 6px;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--accent);
   font-size: 11px;
-  background: var(--accent);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  box-shadow: none;
   flex-shrink: 0;
 
   svg {
@@ -1840,7 +1828,7 @@
 }
 
 .statValue {
-  font-size: 22px;
+  font-size: 21px;
   font-weight: 800;
   color: var(--text-primary);
   line-height: 1.2;
@@ -2077,7 +2065,7 @@
 .detailsFixedCard {
   display: flex;
   flex-direction: column;
-  height: 520px;
+  height: 360px;
   overflow: hidden;
   overflow: clip;
 
@@ -2107,19 +2095,19 @@
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 12.5px;
 
   th,
   td {
-    padding: 10px 12px;
+    padding: 8px 10px;
     text-align: left;
     border-bottom: 1px solid var(--border-color);
   }
 
   th {
-    font-weight: 600;
+    font-weight: 700;
     color: var(--text-tertiary);
-    background-color: var(--bg-secondary);
+    background-color: var(--bg-quinary);
     white-space: nowrap;
   }
 
@@ -2137,7 +2125,7 @@
   }
 
   tbody tr:hover {
-    background-color: color-mix(in srgb, var(--text-primary) 3%, transparent);
+    background-color: color-mix(in srgb, var(--primary-color) 4%, var(--bg-primary));
     box-shadow: none;
     transform: none;
   }
@@ -3361,7 +3349,7 @@
   :global(.card-header) {
     align-items: stretch;
     margin-bottom: 0;
-    padding: 20px 22px 16px;
+    padding: 16px 18px 14px;
     border-bottom: 1px solid var(--border-color);
   }
 
@@ -3383,7 +3371,7 @@
   display: inline-flex;
   align-items: center;
   padding: 3px 9px;
-  border-radius: $radius-full;
+  border-radius: 6px;
   border: 1px solid color-mix(in srgb, var(--primary-color) 28%, var(--border-color));
   background: color-mix(in srgb, var(--primary-color) 8%, var(--bg-primary));
   color: color-mix(in srgb, var(--text-primary) 80%, var(--primary-color));
@@ -3403,12 +3391,11 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  min-height: 42px;
-  padding: 4px;
-  border-radius: 999px;
+  min-height: 36px;
+  padding: 3px;
+  border-radius: 8px;
   border: 1px solid var(--border-color);
-  background: color-mix(in srgb, var(--bg-secondary) 78%, transparent);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  background: var(--bg-secondary);
 
   &::after {
     content: '';
@@ -3422,11 +3409,11 @@
 
 .requestEventsExportButton:global(.btn) {
   border: 0;
-  border-radius: 999px;
-  padding: 8px 12px;
+  border-radius: 6px;
+  padding: 6px 10px;
   background: var(--bg-primary);
   color: var(--text-primary);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
   font-size: 12px;
   font-weight: 600;
   transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
@@ -3505,9 +3492,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 12px;
   flex-wrap: wrap;
-  padding: 12px 22px;
+  padding: 10px 18px;
   border-bottom: 1px solid var(--border-color);
 
   @include mobile {
@@ -3519,7 +3506,7 @@
 .requestEventsFiltersGroup {
   display: inline-flex;
   align-items: center;
-  gap: 18px;
+  gap: 14px;
   flex-wrap: wrap;
   flex: 1 1 auto;
   min-width: 0;
@@ -3546,7 +3533,7 @@
 
 .requestEventsSelect button,
 .requestEventsResultSelect button {
-  height: 38px;
+  height: 36px;
 }
 
 .requestEventsResultSelect {
@@ -3566,7 +3553,7 @@
 
 .requestEventsSearchInput {
   width: 100%;
-  height: 38px;
+  height: 36px;
   padding: 0 32px 0 12px;
   font: inherit;
   font-size: 13px;
@@ -3607,7 +3594,7 @@
 }
 
 .requestEventsPaginationFooter {
-  --usage-pagination-bar-height: 51px;
+  --usage-pagination-bar-height: 45px;
 
   display: flex;
   align-items: center;
@@ -3616,7 +3603,7 @@
   height: var(--usage-pagination-bar-height);
   box-sizing: border-box;
   margin: 0;
-  padding: 0 22px;
+  padding: 0 18px;
   border-top: 1px solid var(--border-color);
 
   @include mobile {
@@ -3634,7 +3621,7 @@
 
 .requestEventsPagerButton {
   border: 1px solid var(--border-color);
-  border-radius: $radius-full;
+  border-radius: 6px;
   background: var(--bg-secondary);
   color: var(--text-primary);
   font: inherit;
@@ -3644,7 +3631,6 @@
 
   &:hover:not(:disabled) {
     border-color: color-mix(in srgb, var(--accent-color) 45%, var(--border-color));
-    transform: translateY(-1px);
   }
 
   &:disabled {
@@ -3670,7 +3656,7 @@
   select {
     height: 32px;
     border: 1px solid var(--border-color);
-    border-radius: $radius-full;
+    border-radius: 6px;
     padding: 0 24px 0 10px;
     background: var(--bg-secondary);
     color: var(--text-primary);
@@ -3694,7 +3680,7 @@
   min-width: 72px;
   height: 32px;
   border: 1px solid var(--border-color);
-  border-radius: $radius-full;
+  border-radius: 6px;
   padding: 0 10px;
   background: var(--bg-secondary);
   color: var(--text-primary);
@@ -3785,7 +3771,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: $radius-full;
+  border-radius: 4px;
   background: rgba($success-color, 0.12);
   color: var(--success-color);
 }
@@ -3818,7 +3804,7 @@
 
 .requestEventsTableWrapper {
   overflow: auto;
-  height: clamp(520px, 68vh, 760px);
+  height: clamp(540px, 70vh, 800px);
   border: 0;
   border-radius: 0;
 

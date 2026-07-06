@@ -14,6 +14,7 @@ const COLOR_STOPS = [
 const TOOLTIP_OFFSET = 8;
 const TOOLTIP_SAFE_WIDTH = 180;
 const TOOLTIP_SAFE_HEIGHT = 72;
+const MIN_HEALTH_GRID_ASPECT_COLUMNS = 48;
 
 type TooltipHorizontalPosition = 'center' | 'left' | 'right';
 type TooltipVerticalPosition = 'above' | 'below';
@@ -262,7 +263,7 @@ export function ServiceHealthCard({ usage, loading }: ServiceHealthCardProps) {
     () => ({
       '--health-grid-columns': String(healthData.columns),
       '--health-grid-rows': String(healthData.rows),
-      '--health-grid-aspect-columns': String(healthData.columns),
+      '--health-grid-aspect-columns': String(Math.max(healthData.columns, MIN_HEALTH_GRID_ASPECT_COLUMNS)),
       '--health-grid-aspect-rows': String(healthData.rows),
       '--health-grid-width': '100%',
     }) as React.CSSProperties,

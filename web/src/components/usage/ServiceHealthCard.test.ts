@@ -23,4 +23,10 @@ describe('ServiceHealthCard title', () => {
     expect(html).toContain('请求健康时间线');
     expect(html).not.toContain('Reliability');
   });
+
+  it('keeps the empty health grid aspect ratio compact', () => {
+    const html = renderToStaticMarkup(createElement(ServiceHealthCard, { usage: null, loading: false }));
+
+    expect(html).toContain('--health-grid-aspect-columns:48');
+  });
 });
