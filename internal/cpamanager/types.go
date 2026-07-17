@@ -23,6 +23,8 @@ type RuntimeStatus struct {
 	ConfigPath          string        `json:"configPath"`
 	CurrentVersion      string        `json:"currentVersion,omitempty"`
 	LatestVersion       string        `json:"latestVersion,omitempty"`
+	ReleaseNotes        string        `json:"releaseNotes,omitempty"`
+	ReleaseURL          string        `json:"releaseURL,omitempty"`
 	UpdateAvailable     bool          `json:"updateAvailable"`
 	CanCompare          bool          `json:"canCompare"`
 	Message             string        `json:"message,omitempty"`
@@ -38,6 +40,8 @@ type UpdateEvent struct {
 
 type ReleaseInfo struct {
 	Version     string
+	Notes       string
+	URL         string
 	ZipURL      string
 	ChecksumURL string
 	AssetName   string

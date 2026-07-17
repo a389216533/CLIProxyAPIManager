@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 const readSource = (url: URL) => readFileSync(url, 'utf8').replace(/\r\n/g, '\n')
 
 const globalStyles = readSource(new URL('../styles/global.scss', import.meta.url))
+const apiWatchmenStyles = readSource(new URL('../styles/api-watchmen.scss', import.meta.url))
 const componentStyles = readSource(new URL('../styles/components.scss', import.meta.url))
 const usagePageStyles = readSource(new URL('./UsagePage.module.scss', import.meta.url))
 const usagePageSource = readSource(new URL('./UsagePage.tsx', import.meta.url))
@@ -11,6 +12,7 @@ const keyOverviewPageSource = readSource(new URL('./KeyOverviewPage.tsx', import
 const requestEventsSource = readSource(new URL('../components/usage/RequestEventsDetailsCard.tsx', import.meta.url))
 const priceSettingsSource = readSource(new URL('../components/usage/PriceSettingsCard.tsx', import.meta.url))
 const selectSource = readSource(new URL('../components/ui/Select.tsx', import.meta.url))
+const selectStyles = readSource(new URL('../components/ui/Select.module.scss', import.meta.url))
 const apiIndexSource = readSource(new URL('../components/usage/index.ts', import.meta.url))
 const apiClientSource = readSource(new URL('../lib/api.ts', import.meta.url))
 const i18nSource = readSource(new URL('../i18n/index.ts', import.meta.url))
@@ -30,9 +32,28 @@ const requestEventColumnDefinitionBlock = (columnId: string) => {
 }
 
 describe('UsagePage toolbar styles', () => {
+  it('loads the API Watchmen palette after the base theme layer', () => {
+    expect(globalStyles).toContain("@use './api-watchmen.scss';")
+    expect(globalStyles.indexOf("@use './api-watchmen.scss';")).toBeGreaterThan(globalStyles.indexOf("@use './themes.scss';"))
+    expect(apiWatchmenStyles).toMatch(/--aw-bg:\s*#e9e8e6;/)
+    expect(apiWatchmenStyles).toMatch(/--aw-accent:\s*#ff633d;/)
+    expect(apiWatchmenStyles).toMatch(/--sidebar-bg:\s*var\(--aw-panel\);/)
+    expect(apiWatchmenStyles).toMatch(/--sidebar-bg-active:\s*var\(--aw-ink\);/)
+    expect(apiWatchmenStyles).toMatch(/\[data-theme='dark'\]\s*\{/)
+  })
+
   it('keeps visible range controls content-sized in narrow layouts', () => {
     expect(usagePageStyles).toMatch(/\.timeRangeGroup\s*\{[\s\S]*?width:\s*fit-content;/)
     expect(usagePageStyles).toMatch(/\.timeRangeSelectControl\s*\{[\s\S]*?flex:\s*0 0 164px;/)
+  })
+
+  it('keeps Select text suffixes from using the icon-only option badge size', () => {
+    expect(selectSource).toContain("typeof opt.suffix === 'string' || typeof opt.suffix === 'number'")
+    expect(selectSource).toContain('styles.optionSuffixText')
+    expect(selectStyles).toMatch(/\.optionLabel\s*\{[\s\S]*?flex:\s*1 1 auto;/)
+    expect(selectStyles).toMatch(/\.optionSuffixText\s*\{[\s\S]*?width:\s*auto;/)
+    expect(selectStyles).toMatch(/\.optionSuffixText\s*\{[\s\S]*?max-width:\s*min\(190px, 52%\);/)
+    expect(selectStyles).toMatch(/\.optionSuffixText\s*\{[\s\S]*?text-overflow:\s*ellipsis;/)
   })
 
   it('keeps overview stat cards in the existing desktop grid with distinct metric colors', () => {
@@ -104,13 +125,14 @@ describe('UsagePage toolbar styles', () => {
     expect(i18nSource).not.toContain('overview_realtime_latency_p95')
   })
 
-  it('keeps refresh controls outside the query filter layout', () => {
+  it('keeps one contextual refresh control in the page header', () => {
     expect(usagePageSource).toMatch(/\{showRangeControls && \(\s*<div className=\{styles\.toolbarRow\}>[\s\S]*?<div className=\{styles\.usageFilterBar\}>/)
-    expect(usagePageSource).toContain('className={styles.usageRefreshSlot}')
-    expect(usagePageSource).toContain('{!showRangeControls && (')
     expect(usagePageSource).toContain('const manualRefreshControl = (')
+    expect(usagePageSource.match(/\{manualRefreshControl\}/g)).toHaveLength(1)
+    expect(usagePageSource).toContain('className={`${styles.topBarActionButton}')
+    expect(usagePageSource).not.toContain('styles.usageRefreshSlot')
     expect(usagePageSource).not.toContain('styles.usageFilterBarCollapsed')
-    expect(usagePageStyles).toMatch(/\.usageRefreshSlot\s*\{[\s\S]*?flex:\s*0 0 auto;/)
+    expect(usagePageStyles).toMatch(/\.topBarActionButton[\s\S]*?min-height:\s*36px;/)
   })
 
   it('removes stale header control styles after the Overview chart cleanup', () => {
@@ -145,27 +167,30 @@ describe('UsagePage toolbar styles', () => {
     expect(i18nSource).not.toContain("tab_analysis: 'API & Models'")
     expect(i18nSource).not.toContain("tab_analysis: 'API 与模型'")
     expect(i18nSource).not.toContain("tab_analysis: 'API 與模型'")
-    expect(usagePageSource).toContain("const USAGE_TAB_OPTIONS = ['overview', 'events', 'auth-files', 'proxy-pools', 'ai-provider', 'config-diagnostics', 'cpa-manager', 'settings'] as const")
+    expect(usagePageSource).toContain("const USAGE_TAB_OPTIONS = ['overview', 'events', 'api-keys', 'auth-files', 'proxy-pools', 'ai-provider', 'config-diagnostics', 'cpa-manager', 'settings'] as const")
     expect(usagePageSource).toContain("const PUBLIC_USAGE_TAB_OPTIONS = ['overview', 'events'] as const")
   })
 
   it('exposes Proxy Pools as a standalone admin navigation tab', () => {
-    expect(usagePageSource).toContain("const USAGE_TAB_OPTIONS = ['overview', 'events', 'auth-files', 'proxy-pools', 'ai-provider', 'config-diagnostics', 'cpa-manager', 'settings'] as const")
+    expect(usagePageSource).toContain("const USAGE_TAB_OPTIONS = ['overview', 'events', 'api-keys', 'auth-files', 'proxy-pools', 'ai-provider', 'config-diagnostics', 'cpa-manager', 'settings'] as const")
     expect(i18nSource).toContain("tab_proxy_pools: '代理池'")
     expect(usagePageSource).toContain("case 'proxy-pools':")
     expect(usagePageSource).toContain("<ProxyPoolManagerPanel")
     expect(usagePageSource).toContain("tab !== 'proxy-pools'")
   })
 
-  it('keeps Sign out as the rightmost header action after Check Updates', () => {
+  it('moves low-frequency global actions into the preferences menu', () => {
     expect(usagePageSource).toContain('logout')
     expect(usagePageSource).toContain('fetchUpdateCheck')
-    expect(usagePageSource.indexOf("t('usage_stats.check_updates')")).toBeLessThan(usagePageSource.indexOf("t('common.logout')"))
-    expect(usagePageStyles).toContain('.signOutSwitcher')
-    expect(usagePageStyles).toContain('.signOutPill')
+    expect(usagePageSource).toContain('className={styles.preferencesDropdown}')
+    expect(usagePageSource).toContain('className={styles.preferencesThemeOptions}')
+    expect(usagePageSource).toContain('<IconExternalLink')
+    expect(usagePageSource).toContain('<IconLogOut')
+    expect(usagePageStyles).toContain('.preferencesMenuItemDanger')
+    expect(usagePageStyles).not.toContain('.signOutSwitcher')
   })
 
-  it('renders tabs as a left sidebar navigation with mobile row fallback', () => {
+  it('renders grouped sidebar navigation with a mobile drawer', () => {
     const desktopTabPillBlock = usagePageStyles.slice(
       usagePageStyles.indexOf('.tabPill {'),
       usagePageStyles.indexOf('.tabPillIcon')
@@ -180,23 +205,34 @@ describe('UsagePage toolbar styles', () => {
     )
 
     expect(usagePageSource).toContain('className={styles.sidebarTabBar}')
+    expect(usagePageSource).toContain('navigationGroups.map((group)')
+    expect(usagePageSource).toContain('className={styles.sidebarNavGroupLabel}')
+    expect(usagePageSource).toContain("aria-current={activeTab === option.value ? 'page' : undefined}")
     expect(usagePageSource).toContain('className={styles.tabPillIcon}')
     expect(usagePageStyles).toMatch(/\.pageShell\s*\{[\s\S]*?width:\s*100%;/)
     expect(usagePageStyles).toMatch(/\.pageShell\s*\{[\s\S]*?min-width:\s*0;/)
+    expect(usagePageStyles).toMatch(/\.pageShell\s*\{[\s\S]*?background:\s*var\(--aw-bg\);/)
     expect(usagePageStyles).toMatch(/\.pageFrame\s*\{[\s\S]*?width:\s*100%;/)
     expect(usagePageStyles).toMatch(/\.pageFrame\s*\{[\s\S]*?min-width:\s*0;/)
+    expect(usagePageStyles).toMatch(/\.pageContentFrame\s*\{[\s\S]*?background:\s*var\(--aw-canvas\);/)
     expect(usagePageStyles).toContain('.sidebarNav')
     expect(usagePageStyles).toContain('.sidebarStatusCard')
-    expect(usagePageStyles).toMatch(/\.sidebarNav\s*\{[\s\S]*?background:\s*var\(--sidebar-bg\);/)
-    expect(usagePageStyles).toMatch(/\.sidebarLogo\s*\{[\s\S]*?background:\s*var\(--sidebar-bg-hover\);/)
+    expect(usagePageStyles).toMatch(/\.sidebarNav\s*\{[\s\S]*?background:\s*var\(--aw-panel\);/)
+    expect(usagePageStyles).toMatch(/\.sidebarLogo\s*\{[\s\S]*?border-radius:\s*50%;/)
+    expect(usagePageStyles).toMatch(/\.sidebarLogo\s*\{[\s\S]*?background:\s*var\(--aw-accent\);/)
+    expect(usagePageStyles).toMatch(/\.sidebarBrandLink\s*\{[\s\S]*?color:\s*var\(--aw-text\);/)
     expect(activeTabPillBlock).toContain('background: var(--sidebar-bg-active);')
-    expect(activeTabPillBlock).toContain('box-shadow: inset 3px 0 0 var(--sidebar-accent);')
+    expect(activeTabPillBlock).toContain('color: var(--sidebar-text-active);')
+    expect(activeTabPillBlock).toContain('box-shadow: none;')
     expect(activeTabPillBlock).not.toContain('linear-gradient')
     expect(desktopTabPillBlock).toContain('width: 100%;')
     expect(desktopTabPillBlock).toContain('border-radius: 7px;')
     expect(desktopTabPillBlock).not.toContain('white-space: nowrap;')
-    expect(mobileNavigationBlock).toMatch(/\.sidebarTabBar\s*\{[\s\S]*?flex-direction:\s*row;/)
+    expect(mobileNavigationBlock).toMatch(/\.sidebarNav,[\s\S]*?position:\s*fixed;/)
+    expect(mobileNavigationBlock).toMatch(/\.sidebarNavMobileOpen\s*\{[\s\S]*?transform:\s*translateX\(0\);/)
+    expect(mobileNavigationBlock).toMatch(/\.sidebarTabBar\s*\{[\s\S]*?flex-direction:\s*column;/)
     expect(mobileNavigationBlock).toMatch(/\.tabPill\s*\{[\s\S]*?white-space:\s*nowrap;/)
+    expect(mobileNavigationBlock).toContain('.mobileNavBackdropVisible')
   })
 
   it('keeps CPA API Key management consolidated outside the Settings tab', () => {
@@ -209,6 +245,8 @@ describe('UsagePage toolbar styles', () => {
     expect(apiIndexSource).not.toContain('ApiKeySettingsCard')
     expect(usagePageSource).not.toContain('ApiKeySettingsCard')
     expect(settingsBlock).not.toContain('apiKeySettings')
+    expect(usagePageSource).toContain("activeTab === 'api-keys'")
+    expect(usagePageSource).toContain('<UsageApiKeysTab')
   })
 
   it('lets Session Management content shrink until it needs to scroll', () => {
@@ -375,13 +413,13 @@ describe('UsagePage toolbar styles', () => {
     expect(usagePageSource).toContain('dropdownMinWidth={180}')
   })
 
-  it('preserves the original desktop toolbar sizing while isolating refresh layout', () => {
-    expect(usagePageStyles).toMatch(/\.container\s*\{[\s\S]*?padding:\s*16px 22px 26px;/)
+  it('keeps the desktop filters dense below the contextual header', () => {
+    expect(usagePageStyles).toMatch(/\.container\s*\{[\s\S]*?padding:\s*16px 20px 24px;/)
     expect(usagePageSource).toMatch(/\{showRangeControls && \(\s*<div className=\{styles\.toolbarRow\}>/)
     expect(usagePageStyles).toMatch(/\.toolbarRow\s*\{[\s\S]*?position:\s*sticky;/)
-    expect(usagePageStyles).toMatch(/\.toolbarRow\s*\{[\s\S]*?top:\s*56px;/)
-    expect(usagePageStyles).toMatch(/\.toolbarRow\s*\{[\s\S]*?margin:\s*0 -22px;/)
-    expect(usagePageStyles).toMatch(/\.toolbarRow\s*\{[\s\S]*?padding:\s*10px 22px;/)
+    expect(usagePageStyles).toMatch(/\.toolbarRow\s*\{[\s\S]*?top:\s*68px;/)
+    expect(usagePageStyles).toMatch(/\.toolbarRow\s*\{[\s\S]*?margin:\s*0 -20px;/)
+    expect(usagePageStyles).toMatch(/\.toolbarRow\s*\{[\s\S]*?padding:\s*9px 20px;/)
     expect(usagePageStyles).toMatch(/\.toolbarActionsRight\s*\{[\s\S]*?align-items:\s*center;/)
     expect(usagePageStyles).toMatch(/\.usageFilterBar\s*\{[\s\S]*?align-items:\s*center;/)
     expect(usagePageStyles).toMatch(/\.usageFilterBar\s*\{[\s\S]*?flex:\s*1 1 auto;/)
@@ -410,7 +448,7 @@ describe('UsagePage toolbar styles', () => {
     expect(usagePageSource).toContain('onKeyDown={handleCustomDateInputKeyDown}')
   })
 
-  it('keeps mobile custom date fields inside the toolbar before the refresh action', () => {
+  it('keeps mobile custom date fields inside the toolbar below the app bar', () => {
     const narrowToolbarStart = usagePageStyles.indexOf('@media (max-width: #{$breakpoint-tablet})')
     const mobileToolbarStart = usagePageStyles.indexOf('@include mobile {\n  .pageFrame', narrowToolbarStart)
     const narrowToolbarBlock = usagePageStyles.slice(
@@ -429,7 +467,7 @@ describe('UsagePage toolbar styles', () => {
     expect(narrowToolbarBlock).toMatch(/\.customRangeFieldGroupOpen\s*\{[\s\S]*?max-height:\s*180px;/)
     expect(mobileToolbarBlock).toMatch(/\.usageFilterBar\s*\{[\s\S]*?display:\s*grid;/)
     expect(mobileToolbarBlock).toMatch(/\.usageFilterBar\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\);/)
-    expect(mobileToolbarBlock).toMatch(/\.toolbarRow\s*\{[\s\S]*?top:\s*0;/)
+    expect(mobileToolbarBlock).toMatch(/\.toolbarRow\s*\{[\s\S]*?top:\s*56px;/)
     expect(mobileToolbarBlock).toMatch(/\.toolbarRow\s*\{[\s\S]*?margin:\s*0 -12px;/)
     expect(mobileToolbarBlock).toMatch(/\.container\s*\{[\s\S]*?padding:\s*12px;/)
     expect(mobileToolbarBlock).toMatch(/\.rangeFilterField\s*\{[\s\S]*?grid-template-columns:\s*auto minmax\(0, 1fr\);/)

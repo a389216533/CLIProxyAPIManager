@@ -31,7 +31,7 @@ describe('AiProviderCredentialsSection', () => {
     expect(html).not.toContain('usage_stats.credentials_ai_providers_eyebrow')
   })
 
-  it('keeps the unified four-metric row layout without auth-file-only badges or quota content', () => {
+  it('keeps the unified four-metric row layout with shared desktop headers and mobile labels', () => {
     const row = {
       identity: {
         id: '1',
@@ -89,10 +89,12 @@ describe('AiProviderCredentialsSection', () => {
       />,
     )
 
-    expect(html.match(/usage_stats\.total_requests/g)).toHaveLength(1)
-    expect(html.match(/usage_stats\.success_rate/g)).toHaveLength(1)
-    expect(html.match(/usage_stats\.total_tokens/g)).toHaveLength(1)
-    expect(html.match(/usage_stats\.cache_rate/g)).toHaveLength(1)
+    expect(html.match(/usage_stats\.total_requests/g)).toHaveLength(2)
+    expect(html.match(/usage_stats\.success_rate/g)).toHaveLength(2)
+    expect(html.match(/usage_stats\.total_tokens/g)).toHaveLength(2)
+    expect(html.match(/usage_stats\.cache_rate/g)).toHaveLength(2)
+    expect(html.match(/credentialMetricHeaderCell/g)).toHaveLength(4)
+    expect(html.match(/credentialMetricLabel/g)).toHaveLength(4)
     expect(html).toContain('usage_stats.credentials_column_name')
     expect(html).toContain('usage_stats.credentials_column_health')
     expect(html).toContain('usage_stats.credentials_health_last_5h')

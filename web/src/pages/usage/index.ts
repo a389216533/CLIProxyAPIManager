@@ -4,4 +4,5 @@ export { UsageCredentialsTab } from './UsageCredentialsTab';
 export { UsageProxyPoolsTab } from './UsageProxyPoolsTab';
 export { UsageConfigDiagnosticsTab } from './UsageConfigDiagnosticsTab';
 export { UsageCpaManagerTab } from './UsageCpaManagerTab';
+export { UsageApiKeysTab } from './UsageApiKeysTab';
 export { UsageSettingsTab } from './UsageSettingsTab';

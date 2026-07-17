@@ -1,0 +1,295 @@
+/* API Watchmen-inspired visual layer shared by the source build. */
+:root,
+[data-theme='white'] {
+  --aw-bg: #e9e8e6;
+  --aw-canvas: #fafaf9;
+  --aw-panel: #ffffff;
+  --aw-panel-soft: #f5f5f3;
+  --aw-line: #ebeae7;
+  --aw-line-strong: #deddd9;
+  --aw-text: #171714;
+  --aw-muted: #706f6a;
+  --aw-subtle: #9b9993;
+  --aw-ink: #1c1c18;
+  --aw-on-ink: #ffffff;
+  --aw-accent: #ff633d;
+  --aw-accent-strong: #e84d27;
+  --aw-accent-soft: #fff2ed;
+  --aw-green: #21845b;
+  --aw-green-soft: #eef8f2;
+  --aw-red: #c9403c;
+  --aw-red-soft: #fff2f2;
+  --aw-amber: #bd6b17;
+  --aw-float-shadow: 0 14px 34px rgb(42 39 32 / 0.12);
+
+  --bg-secondary: var(--aw-canvas);
+  --bg-primary: var(--aw-panel);
+  --bg-tertiary: var(--aw-panel-soft);
+  --bg-hover: #f1f0ed;
+  --bg-quinary: #f8f7f5;
+  --bg-error-light: var(--aw-red-soft);
+  --floating-surface: var(--aw-panel);
+  --floating-border: var(--aw-line-strong);
+  --floating-shadow: var(--aw-float-shadow);
+  --text-primary: var(--aw-text);
+  --text-secondary: var(--aw-muted);
+  --text-tertiary: var(--aw-subtle);
+  --text-quaternary: #bbb8b0;
+  --border-color: var(--aw-line);
+  --border-primary: var(--aw-line-strong);
+  --border-hover: #c6c2b9;
+  --primary-color: var(--aw-ink);
+  --primary-hover: #32322c;
+  --primary-active: #10100e;
+  --primary-contrast: var(--aw-on-ink);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--aw-accent) 15%, transparent);
+  --accent-color: var(--aw-accent);
+  --success-color: var(--aw-green);
+  --warning-color: var(--aw-amber);
+  --quota-medium-color: var(--aw-amber);
+  --error-color: var(--aw-red);
+  --danger-color: var(--aw-red);
+  --sidebar-bg: var(--aw-panel);
+  --sidebar-bg-hover: var(--aw-panel-soft);
+  --sidebar-bg-active: var(--aw-ink);
+  --sidebar-border: var(--aw-line);
+  --sidebar-text: var(--aw-muted);
+  --sidebar-text-muted: var(--aw-subtle);
+  --sidebar-text-active: var(--aw-on-ink);
+  --sidebar-accent: var(--aw-accent);
+  --success-badge-bg: var(--aw-green-soft);
+  --success-badge-text: var(--aw-green);
+  --failure-badge-bg: var(--aw-red-soft);
+  --failure-badge-text: var(--aw-red);
+  --shadow: 0 1px 2px rgb(42 39 32 / 0.06);
+  --shadow-lg: 0 10px 28px rgb(42 39 32 / 0.08);
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --aw-bg: #10100f;
+  --aw-canvas: #171716;
+  --aw-panel: #20201e;
+  --aw-panel-soft: #292925;
+  --aw-line: #34332f;
+  --aw-line-strong: #48463f;
+  --aw-text: #f4f3ef;
+  --aw-muted: #b3b0a8;
+  --aw-subtle: #858179;
+  --aw-ink: #f2f1ec;
+  --aw-on-ink: #1a1a17;
+  --aw-accent: #ff7654;
+  --aw-accent-strong: #ff896b;
+  --aw-accent-soft: #3a251f;
+  --aw-green: #51bd87;
+  --aw-green-soft: #183226;
+  --aw-red: #ef7770;
+  --aw-red-soft: #3a2221;
+  --aw-amber: #dda35a;
+  --aw-float-shadow: 0 16px 38px rgb(0 0 0 / 0.34);
+
+  --bg-secondary: var(--aw-canvas);
+  --bg-primary: var(--aw-panel);
+  --bg-tertiary: var(--aw-panel-soft);
+  --bg-hover: #302f2b;
+  --bg-quinary: #1b1b19;
+  --bg-error-light: var(--aw-red-soft);
+  --floating-surface: var(--aw-panel);
+  --floating-border: var(--aw-line-strong);
+  --floating-shadow: var(--aw-float-shadow);
+  --text-primary: var(--aw-text);
+  --text-secondary: var(--aw-muted);
+  --text-tertiary: var(--aw-subtle);
+  --text-quaternary: #67645d;
+  --border-color: var(--aw-line);
+  --border-primary: var(--aw-line-strong);
+  --border-hover: #5d5a52;
+  --primary-color: var(--aw-ink);
+  --primary-hover: #ffffff;
+  --primary-active: #d8d6cf;
+  --primary-contrast: var(--aw-on-ink);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--aw-accent) 18%, transparent);
+  --accent-color: var(--aw-accent);
+  --success-color: var(--aw-green);
+  --warning-color: var(--aw-amber);
+  --quota-medium-color: var(--aw-amber);
+  --error-color: var(--aw-red);
+  --danger-color: var(--aw-red);
+  --sidebar-bg: var(--aw-panel);
+  --sidebar-bg-hover: var(--aw-panel-soft);
+  --sidebar-bg-active: var(--aw-ink);
+  --sidebar-border: var(--aw-line);
+  --sidebar-text: var(--aw-muted);
+  --sidebar-text-muted: var(--aw-subtle);
+  --sidebar-text-active: var(--aw-on-ink);
+  --sidebar-accent: var(--aw-accent);
+  --success-badge-bg: var(--aw-green-soft);
+  --success-badge-text: var(--aw-green);
+  --failure-badge-bg: var(--aw-red-soft);
+  --failure-badge-text: var(--aw-red);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+  --shadow-lg: 0 12px 30px rgb(0 0 0 / 0.24);
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  letter-spacing: 0 !important;
+}
+
+html,
+body,
+.app-frame,
+.app-main {
+  background: var(--aw-bg) !important;
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: 'Segoe UI Variable', 'Segoe UI', 'PingFang SC', 'Microsoft YaHei UI', sans-serif;
+}
+
+code,
+input[type='password'] {
+  font-family: 'Cascadia Mono', 'SFMono-Regular', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.card,
+.stat-card,
+[class*='_healthCard_'],
+[class*='_analysisCard_'],
+[class*='_summaryCard_'],
+[class*='_overviewRealtimeCard_'],
+[class*='_credentialSectionCard_'],
+[class*='_detailsFixedCard_'],
+[class*='_configDiagnosticsCard_'],
+[class*='_cpaManagerCard_'],
+[class*='_requestEventsCard_'] {
+  border: 1px solid var(--aw-line) !important;
+  border-radius: 8px !important;
+  background: var(--aw-panel) !important;
+  box-shadow: none !important;
+}
+
+.btn,
+.icon-btn {
+  min-height: 38px;
+  border-color: var(--aw-line-strong);
+  border-radius: 8px !important;
+  background: var(--aw-panel);
+  color: var(--aw-text);
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.btn:hover:not(:disabled),
+.icon-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--aw-accent) 52%, var(--aw-line-strong));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--aw-accent) 10%, transparent);
+  transform: none;
+}
+
+.btn-primary {
+  border-color: var(--aw-ink) !important;
+  background: var(--aw-ink) !important;
+  color: var(--aw-on-ink) !important;
+}
+
+.btn-secondary,
+.btn-ghost {
+  border-color: var(--aw-line-strong) !important;
+  background: var(--aw-panel) !important;
+  color: var(--aw-text) !important;
+}
+
+.btn-danger {
+  border-color: color-mix(in srgb, var(--aw-red) 28%, var(--aw-line)) !important;
+  background: var(--aw-red-soft) !important;
+  color: var(--aw-red) !important;
+}
+
+.input,
+input:not([type='checkbox']):not([type='radio']),
+select,
+textarea,
+[class*='_trigger_'] {
+  min-height: 38px;
+  border-color: var(--aw-line-strong) !important;
+  border-radius: 8px !important;
+  background: var(--aw-panel) !important;
+  color: var(--aw-text) !important;
+  box-shadow: none !important;
+}
+
+.form-group label {
+  color: var(--aw-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.input:focus,
+input:not([type='checkbox']):not([type='radio']):focus,
+select:focus,
+textarea:focus {
+  border-color: var(--aw-accent) !important;
+  outline: 0 !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--aw-accent) 11%, transparent) !important;
+}
+
+[class*='_dropdown_'],
+[class*='ColumnDropdown_'] {
+  border-color: var(--aw-line) !important;
+  border-radius: 8px !important;
+  background: var(--aw-panel) !important;
+  box-shadow: var(--aw-float-shadow) !important;
+}
+
+[class*='_optionActive_'] {
+  border-color: color-mix(in srgb, var(--aw-accent) 28%, var(--aw-line)) !important;
+  background: var(--aw-accent-soft) !important;
+}
+
+[class*='_credentialRow_'] {
+  border-color: var(--aw-line) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+[class*='_credentialRow_']:hover {
+  border-color: color-mix(in srgb, var(--aw-accent) 35%, var(--aw-line)) !important;
+  background: var(--aw-accent-soft) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.modal-overlay {
+  background: rgb(23 23 20 / 0.48) !important;
+  backdrop-filter: blur(5px);
+}
+
+.modal {
+  border-color: var(--aw-line) !important;
+  background: var(--aw-panel) !important;
+  box-shadow: 0 24px 70px rgb(20 19 16 / 0.24) !important;
+}
+
+.error-box,
+[class*='_errorBox_'] {
+  border-color: color-mix(in srgb, var(--aw-red) 28%, var(--aw-line)) !important;
+  background: var(--aw-red-soft) !important;
+  color: var(--aw-red) !important;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--aw-line-strong) !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--aw-subtle) !important;
+}

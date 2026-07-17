@@ -2,18 +2,27 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/lib/api'
 import { buildCredentialQuotaStateMap, quotaRefreshDisplayError, quotaResetDisplayError, runQuotaResetForAuthIndex } from './useCredentialsTabData'
-import { CREDENTIAL_PAGES_REFRESH_INTERVAL_MS, mergeUsageIdentityAliasUpdate } from './useCredentialPages'
+import { AUTH_FILE_QUERY_DEBOUNCE_MS, CREDENTIAL_PAGES_REFRESH_INTERVAL_MS, mergeUsageIdentityAliasUpdate } from './useCredentialPages'
 import { buildQuotaCacheAuthIndexesKey, QUOTA_CACHE_REFRESH_INTERVAL_MS } from './useQuotaCache'
 import { buildQuotaRefreshSubmissionUpdate, buildQuotaRefreshTaskErrorUpdate } from './useQuotaRefreshTasks'
 import type { UsageIdentity } from '@/lib/types'
 
 const credentialsTabDataSource = readFileSync(new URL('./useCredentialsTabData.ts', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const authFileCredentialsSectionSource = readFileSync(new URL('./AuthFileCredentialsSection.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+const credentialPagesSource = readFileSync(new URL('./useCredentialPages.ts', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const quotaCacheSource = readFileSync(new URL('./useQuotaCache.ts', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 
 describe('Credentials polling intervals', () => {
   it('keeps list data on a 1 minute refresh interval', () => {
     expect(CREDENTIAL_PAGES_REFRESH_INTERVAL_MS).toBe(60 * 1000)
+  })
+
+  it('debounces Auth Files server search without delaying the input state', () => {
+    expect(AUTH_FILE_QUERY_DEBOUNCE_MS).toBe(300)
+    expect(credentialPagesSource).toContain('setAuthFileQueryState(query)')
+    expect(credentialPagesSource).toContain('window.setTimeout')
+    expect(credentialPagesSource).toContain('setDebouncedAuthFileQuery(authFileQuery)')
+    expect(credentialPagesSource).toContain('query: debouncedAuthFileQuery || undefined')
   })
 
   it('keeps quota cache on a 1 minute refresh interval', () => {

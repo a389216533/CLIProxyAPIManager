@@ -18,6 +18,8 @@ type releaseClient struct {
 
 type githubRelease struct {
 	TagName string `json:"tag_name"`
+	Body    string `json:"body"`
+	HTMLURL string `json:"html_url"`
 	Assets  []struct {
 		Name string `json:"name"`
 		URL  string `json:"browser_download_url"`
@@ -64,6 +66,8 @@ func (c *releaseClient) Latest(ctx context.Context) (ReleaseInfo, error) {
 	assetSuffix := fmt.Sprintf("windows_%s.zip", arch)
 	var result ReleaseInfo
 	result.Version = strings.TrimSpace(payload.TagName)
+	result.Notes = strings.TrimSpace(payload.Body)
+	result.URL = strings.TrimSpace(payload.HTMLURL)
 	for _, asset := range payload.Assets {
 		if strings.EqualFold(asset.Name, "checksums.txt") {
 			result.ChecksumURL = asset.URL

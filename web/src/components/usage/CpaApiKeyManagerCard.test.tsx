@@ -3,6 +3,7 @@ import '@/i18n';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CpaApiKeyManagerCard, copyApiKeyToClipboard, getCpaApiKeyManagerCanSave } from './CpaApiKeyManagerCard';
+import { CpaApiKeyDeleteDialog, CpaApiKeyEditorDialog } from './CpaApiKeyManagerDialogs';
 import type { CpaApiKeySettingsItem } from '@/lib/types';
 
 const apiKeys: CpaApiKeySettingsItem[] = [
@@ -24,17 +25,72 @@ const renderCard = (props: Partial<React.ComponentProps<typeof CpaApiKeyManagerC
 );
 
 describe('CpaApiKeyManagerCard', () => {
-  it('renders name and key fields without exposing raw keys by default', () => {
+  it('renders credential hierarchy with read-only, secret-safe API key rows by default', () => {
     const html = renderCard();
 
     expect(html).toContain('CPA API Key 管理');
+    expect(html).toContain('<section');
     expect(html).toContain('名称');
     expect(html).toContain('Key 值');
     expect(html).toContain('Primary');
     expect(html).toContain('sk-*********123456');
-    expect(html).toContain('type="password"');
+    expect(html).toContain('新建 API Key');
+    expect(html).toContain('复制');
+    expect(html).toContain('编辑');
+    expect(html).toContain('删除');
+    expect(html).toContain('显示 Key 值');
+    expect(html).toContain('aria-pressed="false"');
+    expect(html).not.toContain('<input');
     expect(html).not.toContain('sk-alpha123456');
     expect(html).not.toContain('9007199254740993');
+  });
+
+  it('renders a delete target summary without exposing its raw key', () => {
+    const html = renderToStaticMarkup(
+      <CpaApiKeyDeleteDialog
+        target={apiKeys[0]}
+        error=""
+        deleting={false}
+        title="删除 CPA API Key"
+        body="删除后无法恢复，请确认是否继续。"
+        cancelLabel="取消"
+        deleteLabel="删除"
+        onClose={() => undefined}
+        onConfirm={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Primary');
+    expect(html).toContain('sk-*********123456');
+    expect(html).not.toContain('sk-alpha123456');
+  });
+
+  it('marks editor fields required and associates callback errors with both fields', () => {
+    const html = renderToStaticMarkup(
+      <CpaApiKeyEditorDialog
+        open
+        title="编辑 CPA API Key"
+        draft={{ keyAlias: 'Primary', apiKey: 'sk-alpha123456' }}
+        error="保存失败"
+        submitting={false}
+        submitLabel="保存"
+        cancelLabel="取消"
+        nameLabel="名称"
+        namePlaceholder="例如：主账号"
+        keyLabel="Key 值"
+        keyPlaceholder="粘贴完整 API Key"
+        showKeyLabel="显示 Key 值"
+        hideKeyLabel="隐藏 Key 值"
+        onDraftChange={() => undefined}
+        onClose={() => undefined}
+        onSubmit={() => undefined}
+      />,
+    );
+    const errorId = html.match(/id="([^"]+-error)"/)?.[1] ?? '';
+
+    expect(html.match(/required=""/g)).toHaveLength(2);
+    expect(errorId).not.toBe('');
+    expect(html.match(new RegExp(`aria-describedby="${errorId}"`, 'g'))).toHaveLength(2);
   });
 
   it('renders loading and empty states', () => {

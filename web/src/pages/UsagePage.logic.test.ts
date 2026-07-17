@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildCustomDateRangeQuery, clampCustomDateRangeToBounds, CUSTOM_DATE_RANGE_BOUNDS_REFRESH_INTERVAL_MS, getBackToCPALinkURL, getCredentialSectionVisibility, getCustomDateRangeBounds, getOverviewDisplayLoading, getTimeRangeOptions, getUsageTabOptions, getVisibleUsageTabOptions, isCustomDateWithinBounds, isUsagePageVisible, loadRequestEventsPreferences, loadUsagePageVersionInfo, mergeRealtimeUsageEventPage, normalizeRequestEventsPreferences, normalizeUsageTabValue, openDateInputPicker, refreshPageData, REQUEST_EVENTS_PREFERENCES_STORAGE_KEY, sanitizeRequestEventFilters, saveRequestEventsPreferences, scheduleCustomDateRangeBoundsRefresh, scheduleOverviewAutoRefresh, scheduleStatusActiveHeartbeat, shouldAutoRefreshUsageTab, shouldShowApiKeyFilter, shouldShowRangeControls, shouldShowUpdateCheckButton, STATUS_ACTIVE_HEARTBEAT_INTERVAL_MS, getUpdateCheckToastDuration } from './UsagePage';
+import { buildCustomDateRangeQuery, clampCustomDateRangeToBounds, cpaUpdateCheckIntervalMs, CUSTOM_DATE_RANGE_BOUNDS_REFRESH_INTERVAL_MS, getBackToCPALinkURL, getCredentialSectionVisibility, getCustomDateRangeBounds, getOverviewDisplayLoading, getTimeRangeOptions, getUsageTabFromSearch, getUsageTabOptions, getVisibleUsageTabOptions, isCustomDateWithinBounds, isUsagePageVisible, loadRequestEventsPreferences, loadUsagePageVersionInfo, mergeRealtimeUsageEventPage, normalizeRequestEventsPreferences, normalizeUsageTabValue, openDateInputPicker, refreshPageData, REQUEST_EVENTS_PREFERENCES_STORAGE_KEY, sanitizeRequestEventFilters, saveRequestEventsPreferences, scheduleCpaUpdateChecks, scheduleCustomDateRangeBoundsRefresh, scheduleOverviewAutoRefresh, scheduleStatusActiveHeartbeat, shouldAutoRefreshUsageTab, shouldShowApiKeyFilter, shouldShowRangeControls, shouldShowUpdateCheckButton, STATUS_ACTIVE_HEARTBEAT_INTERVAL_MS, getUpdateCheckToastDuration } from './UsagePage';
 import { REQUEST_EVENT_COLUMN_IDS } from '@/components/usage/RequestEventsDetailsCard';
 import { ApiError } from '@/lib/api';
 import type { StatusResponse, UsageFilterWindow, VersionResponse } from '@/lib/types';
@@ -188,6 +188,7 @@ describe('UsagePage public readonly mode', () => {
 
     expect(publicTabs).toEqual(['overview', 'events']);
     expect(publicTabs).not.toContain('cpa-manager');
+    expect(publicTabs).not.toContain('api-keys');
     expect(publicTabs).not.toContain('settings');
     expect(publicTabs).not.toContain('auth-files');
   });
@@ -307,6 +308,53 @@ describe('UsagePage visibility guard', () => {
   it('treats hidden documents as inactive for credentials polling', () => {
     expect(isUsagePageVisible({ visibilityState: 'visible' })).toBe(true);
     expect(isUsagePageVisible({ visibilityState: 'hidden' })).toBe(false);
+  });
+});
+
+describe('UsagePage CPA update checks', () => {
+  it('converts the backend duration from nanoseconds to browser milliseconds', () => {
+    expect(cpaUpdateCheckIntervalMs(6 * 60 * 60 * 1_000_000_000)).toBe(21_600_000);
+    expect(cpaUpdateCheckIntervalMs(0)).toBe(0);
+    expect(cpaUpdateCheckIntervalMs(Number.POSITIVE_INFINITY)).toBe(0);
+  });
+
+  it('checks on the configured cadence and when the page becomes visible', async () => {
+    let intervalHandler: (() => void) | undefined;
+    const testDocument = createAutoRefreshTestDocument();
+    const timerTarget = {
+      setInterval: vi.fn((handler: () => void, timeout: number) => {
+        intervalHandler = handler;
+        expect(timeout).toBe(21_600_000);
+        return 21;
+      }),
+      clearInterval: vi.fn(),
+    };
+    const checkForUpdate = vi.fn(async () => undefined);
+
+    const cleanup = scheduleCpaUpdateChecks({
+      enabled: true,
+      intervalNanoseconds: 6 * 60 * 60 * 1_000_000_000,
+      checkForUpdate,
+      documentRef: testDocument,
+      timerTarget,
+    });
+
+    expect(checkForUpdate).not.toHaveBeenCalled();
+    intervalHandler?.();
+    await flushPromises();
+    expect(checkForUpdate).toHaveBeenCalledTimes(1);
+
+    testDocument.setVisibilityState('hidden');
+    testDocument.dispatchEvent(new Event('visibilitychange'));
+    expect(timerTarget.clearInterval).toHaveBeenCalledWith(21);
+
+    testDocument.setVisibilityState('visible');
+    testDocument.dispatchEvent(new Event('visibilitychange'));
+    await flushPromises();
+    expect(checkForUpdate).toHaveBeenCalledTimes(2);
+    expect(timerTarget.setInterval).toHaveBeenCalledTimes(2);
+
+    cleanup();
   });
 });
 
@@ -800,6 +848,7 @@ describe('UsagePage request event preferences', () => {
 for (const [tab, expected] of [
   ['overview', true],
   ['events', true],
+  ['api-keys', false],
   ['auth-files', false],
   ['ai-provider', false],
   ['settings', false],
@@ -812,6 +861,7 @@ for (const [tab, expected] of [
 for (const [tab, expected] of [
   ['overview', true],
   ['events', true],
+  ['api-keys', false],
   ['auth-files', false],
   ['ai-provider', false],
   ['settings', false],
@@ -905,6 +955,7 @@ describe('UsagePage tab labels', () => {
     expect(labels).toEqual([
       'translated:usage_stats.tab_overview',
       'translated:usage_stats.tab_events',
+      'translated:usage_stats.tab_api_keys',
       'translated:usage_stats.tab_auth_files',
       'translated:usage_stats.tab_proxy_pools',
       'translated:usage_stats.tab_ai_provider',
@@ -924,6 +975,13 @@ describe('UsagePage proxy pools tab', () => {
 });
 
 describe('UsagePage credentials tab migration', () => {
+  it('reads direct and legacy tab values from the URL query', () => {
+    expect(getUsageTabFromSearch('?tab=auth-files')).toBe('auth-files');
+    expect(getUsageTabFromSearch('?view=compact&tab=credentials')).toBe('auth-files');
+    expect(getUsageTabFromSearch('?tab=unknown')).toBeNull();
+    expect(getUsageTabFromSearch('')).toBeNull();
+  });
+
   it('migrates the legacy Credentials tab value to Auth Files', () => {
     expect(normalizeUsageTabValue('credentials')).toBe('auth-files');
   });

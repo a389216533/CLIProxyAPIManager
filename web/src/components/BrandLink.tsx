@@ -10,7 +10,7 @@ export function BrandLink({ className = '' }: BrandLinkProps) {
 
   return (
     <a className={linkClassName} href={GITHUB_REPOSITORY_URL} target="_blank" rel="noreferrer">
-      CLIProxyAPIManager
+      CPA Manager
     </a>
   );
 }

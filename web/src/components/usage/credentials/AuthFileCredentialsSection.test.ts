@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { AuthFileCredentialsSection, AuthFileQuotaPanel, INSPECTION_RESULT_PAGE_SIZE_OPTIONS, PROXY_POOL_TEST_HISTORY_LIMIT, ProxyPoolManagerPanel, authFileDeleteName, buildInspectionResultsPage, buildInvalidInspectionAccountFileNames, buildProxyPoolOptionLabel, buildProxyPoolOptionMeta, buildProxyPoolTestHistory, buildProxyPoolTestSummary, formatInspectionCompletedAt, formatInspectionProgressPercent, formatProxyPoolTargetResult, formatQuotaErrorDisplay, formatQuotaResetDuration, formatQuotaResetLabel, formatQuotaWindowUsageAriaLabel, inspectionIndicatorTone, invertInvalidInspectionAccountFileNames, isInspectionStartDisabled, isSelectableInspectionStatusFilter, nextInspectionResultStatusFilter, persistAuthFileDisplayMode, readProxyPoolTestHistory, readStoredAuthFileDisplayMode, selectAllInvalidInspectionAccountFileNames, sortProxyPoolBindingRows, sortProxyPoolsForDisplay } from './AuthFileCredentialsSection'
+import { AuthFileCredentialsSection, AuthFileQuotaPanel, INSPECTION_RESULT_PAGE_SIZE_OPTIONS, PROXY_POOL_TEST_HISTORY_LIMIT, ProxyPoolManagerPanel, authFileDeleteName, buildInspectionResultsPage, buildInvalidInspectionAccountFileNames, buildProxyPoolOptionLabel, buildProxyPoolOptionMeta, buildProxyPoolTestHistory, buildProxyPoolTestSummary, formatInspectionCompletedAt, formatInspectionProgressPercent, formatProxyPoolTargetResult, formatQuotaErrorDisplay, formatQuotaResetDuration, formatQuotaResetLabel, formatQuotaWindowUsageAriaLabel, inspectionIndicatorTone, invertInvalidInspectionAccountFileNames, isInspectionStartDisabled, isSelectableInspectionStatusFilter, nextInspectionResultStatusFilter, persistAuthFileDisplayMode, readProxyPoolTestHistory, readStoredAuthFileDisplayMode, reconcileSelectedAuthIndexes, selectAllInvalidInspectionAccountFileNames, sortProxyPoolBindingRows, sortProxyPoolsForDisplay } from './AuthFileCredentialsSection'
 import type { AuthFileCredentialRow, DisplayQuota } from './credentialViewModels'
 import type { UsageQuotaInspectionResult, UsageQuotaInspectionResultStatus } from '@/lib/types'
 
@@ -29,6 +29,8 @@ const createAuthFileSectionProps = (overrides: Partial<Parameters<typeof AuthFil
   proxyPoolsLoading: false,
   proxyPoolsError: '',
   proxyPoolFilterId: '',
+  providerFilter: 'all' as const,
+  authFileQuery: '',
   onPageChange: () => undefined,
   onPageSizeChange: () => undefined,
   onActiveOnlyChange: () => undefined,
@@ -97,7 +99,7 @@ describe('AuthFileCredentialsSection title', () => {
     expect(html).not.toContain('usage_stats.credentials_auth_files_eyebrow')
   })
 
-  it('renders shared metric headers without repeating labels in each row', () => {
+  it('renders shared desktop metric headers with row-level mobile labels', () => {
     const row = {
       identity: { id: '1', identity: 'auth-1', is_deleted: false },
       displayName: 'Very Long Auth File Name For Wrapping',
@@ -119,10 +121,12 @@ describe('AuthFileCredentialsSection title', () => {
 
     const html = renderToStaticMarkup(createElement(AuthFileCredentialsSection, createAuthFileSectionProps({ rows: [row], total: 1 })))
 
-    expect(html.match(/usage_stats\.total_requests/g)).toHaveLength(1)
-    expect(html.match(/usage_stats\.success_rate/g)).toHaveLength(1)
-    expect(html.match(/usage_stats\.total_tokens/g)).toHaveLength(1)
-    expect(html.match(/usage_stats\.cache_rate/g)).toHaveLength(1)
+    expect(html.match(/usage_stats\.total_requests/g)).toHaveLength(2)
+    expect(html.match(/usage_stats\.success_rate/g)).toHaveLength(2)
+    expect(html.match(/usage_stats\.total_tokens/g)).toHaveLength(2)
+    expect(html.match(/usage_stats\.cache_rate/g)).toHaveLength(2)
+    expect(html.match(/credentialMetricHeaderCell/g)).toHaveLength(4)
+    expect(html.match(/credentialMetricLabel/g)).toHaveLength(4)
     expect(html).toContain('usage_stats.credentials_column_name')
     expect(html).toContain('usage_stats.credentials_column_quota')
     expect(html).toContain('1,234')
@@ -194,7 +198,7 @@ describe('AuthFileCredentialsSection title', () => {
     expect(authFileSectionSource).toContain('await onAfterInvalidAccountAction?.()')
   })
 
-  it('renders quick proxy controls and shows row proxy binding', () => {
+  it('keeps proxy binding visible while batch proxy actions require row selection', () => {
     const row = {
       identity: { id: '1', identity: 'auth-1', file_name: 'codex-user.json', proxy_url: 'socks5://127.0.0.1:1080', is_deleted: false },
       displayName: 'Codex User',
@@ -219,11 +223,26 @@ describe('AuthFileCredentialsSection title', () => {
       proxyPools: [{ id: 'pool-1', name: 'Proxy A', proxy_url: 'socks5://127.0.0.1:1080', created_at: '', updated_at: '' }],
     })))
 
-    expect(html).toContain('批量设置代理')
+    expect(html).not.toContain('批量设置代理')
     expect(html).toContain('Proxy A')
-    expect(html).toContain('应用')
-    expect(html).toContain('清空')
     expect(html).toContain('代理: Proxy A')
+    expect(authFileSectionSource).not.toContain('credentialQuickProxySetter')
+    expect(authFileSectionSource).not.toContain('applyQuickProxyPool')
+    expect(authFileSectionSource).toContain('batchActionSelect')
+  })
+
+  it('separates filters, visible actions, and the accessible more-actions menu', () => {
+    const html = renderToStaticMarkup(createElement(AuthFileCredentialsSection, createAuthFileSectionProps()))
+
+    expect(html).toContain('role="search"')
+    expect(html).toContain('aria-label="筛选认证文件"')
+    expect(html).toContain('role="toolbar"')
+    expect(html).toContain('usage_stats.credentials_auth_file_import_open')
+    expect(html).toContain('usage_stats.credentials_quota_refresh_current_page')
+    expect(html).toContain('aria-haspopup="menu"')
+    expect(html).toContain('更多操作')
+    expect(authFileSectionSource).toContain('role="menuitem"')
+    expect(authFileSectionSource).toContain('onOpenInspection={openInspection}')
   })
 
   it('shows binding count and latency context when choosing proxy pools for auth files', () => {
@@ -491,6 +510,25 @@ describe('AuthFileCredentialsSection title', () => {
 
     expect(sortProxyPoolBindingRows(rows, 'name_asc').map((row) => row.name)).toEqual(['a.json', 'b.json', 'c.json'])
     expect(sortProxyPoolBindingRows(rows, 'proxy_asc').map((row) => row.name)).toEqual(['c.json', 'b.json', 'a.json'])
+  })
+})
+
+describe('AuthFileCredentialsSection selection reconciliation', () => {
+  const makeRow = (identity: string, isDeleted = false) => ({
+    identity: { id: identity, identity, is_deleted: isDeleted },
+  } as AuthFileCredentialRow)
+
+  it('drops selections that are filtered out or deleted', () => {
+    const current = new Set(['auth-1', 'auth-2', 'auth-3'])
+    const next = reconcileSelectedAuthIndexes(current, [makeRow('auth-1'), makeRow('auth-2', true)])
+
+    expect(Array.from(next)).toEqual(['auth-1'])
+  })
+
+  it('preserves the selection reference when all selected rows remain visible', () => {
+    const current = new Set(['auth-1'])
+
+    expect(reconcileSelectedAuthIndexes(current, [makeRow('auth-1'), makeRow('auth-2')])).toBe(current)
   })
 })
 

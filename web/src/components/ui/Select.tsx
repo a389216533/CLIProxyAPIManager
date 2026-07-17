@@ -305,6 +305,7 @@ export function Select({
             {options.map((opt, index) => {
               const active = opt.value === value;
               const highlighted = index === resolvedHighlightedIndex;
+              const textSuffix = typeof opt.suffix === 'string' || typeof opt.suffix === 'number';
               return (
                 <button
                   key={opt.value}
@@ -321,7 +322,7 @@ export function Select({
                 >
                   <span className={styles.optionLabel}>{opt.label}</span>
                   {opt.suffix ? (
-                    <span className={styles.optionSuffix} aria-label={opt.suffixAriaLabel}>
+                    <span className={`${styles.optionSuffix} ${textSuffix ? styles.optionSuffixText : ''}`.trim()} aria-label={opt.suffixAriaLabel}>
                       {opt.suffix}
                     </span>
                   ) : null}

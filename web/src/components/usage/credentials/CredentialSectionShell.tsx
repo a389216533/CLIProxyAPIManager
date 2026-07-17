@@ -135,9 +135,12 @@ export function CredentialPriorityBadge({ children }: { children: ReactNode }) {
   return <span className={styles.credentialPriorityBadge}>{children}</span>
 }
 
-export function MetricPill({ value }: { value: ReactNode }) {
+export function MetricPill({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <span className={styles.credentialMetricValueCell}>{value}</span>
+    <span className={styles.credentialMetricValueCell}>
+      <span className={styles.credentialMetricLabel}>{label}</span>
+      <span className={styles.credentialMetricValueContent}>{value}</span>
+    </span>
   )
 }
 

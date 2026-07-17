@@ -14,6 +14,7 @@ import type { ProxyPool, ProxyPoolTestResponse, ProxyPoolTestTargetResult, Usage
 import { CredentialAliasEditor, isCredentialAliasEditorDisabled } from './CredentialAliasEditor'
 import { CredentialHealthPanel } from './CredentialHealthPanel'
 import { CredentialProviderFilterIcon } from './CredentialProviderFilterBar'
+import type { CredentialProviderFilterKey } from './credentialProviderFilters'
 import { CredentialBadge, CredentialPriorityBadge, CredentialRowShell, CredentialSectionShell, CredentialTableHeader, CredentialsPagination, MetricPill, RequestMetric, TonePercent, cacheRateTone, capitalize, credentialToneClassName, formatCredentialNumber, successRateTone } from './CredentialSectionShell'
 import { Select } from '@/components/ui/Select'
 
@@ -63,6 +64,104 @@ const INVALID_INSPECTION_ACCOUNT_STATUSES = new Set<UsageQuotaInspectionResultSt
   'payment_required_402',
 ])
 
+export function reconcileSelectedAuthIndexes(current: Set<string>, rows: AuthFileCredentialRow[]): Set<string> {
+  if (current.size === 0) return current
+
+  const visibleAuthIndexes = new Set(
+    rows
+      .filter((row) => !row.identity.is_deleted)
+      .map((row) => row.identity.identity)
+  )
+  const next = new Set(Array.from(current).filter((authIndex) => visibleAuthIndexes.has(authIndex)))
+  return next.size === current.size ? current : next
+}
+
+function AuthFileMoreActionsMenu({ inspectionTone, inspectionLabel, onOpenInspection }: {
+  inspectionTone: InspectionIndicatorTone
+  inspectionLabel: string
+  onOpenInspection: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const menuId = useId()
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const inspectionItemRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (event.target instanceof Node && !rootRef.current?.contains(event.target)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [open])
+
+  useEffect(() => {
+    if (open) inspectionItemRef.current?.focus()
+  }, [open])
+
+  return (
+    <div
+      ref={rootRef}
+      className={styles.credentialMoreActions}
+      onBlur={(event) => {
+        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
+        setOpen(false)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          setOpen(false)
+          triggerRef.current?.focus()
+        }
+      }}
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`${styles.credentialToolbarButton} ${styles.credentialMoreActionsTrigger}`.trim()}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={menuId}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowDown') return
+          event.preventDefault()
+          setOpen(true)
+        }}
+      >
+        <span>更多操作</span>
+        {inspectionTone !== 'idle' && (
+          <span className={`${styles.credentialInspectionDot} ${styles[`credentialInspectionDot${capitalize(inspectionTone)}`]}`.trim()} aria-hidden="true" />
+        )}
+        <IconChevronDown size={12} aria-hidden="true" />
+      </button>
+      {open && (
+        <div id={menuId} className={styles.credentialMoreActionsMenu} role="menu" aria-label="更多操作">
+          <button
+            ref={inspectionItemRef}
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
+              onOpenInspection()
+            }}
+          >
+            <IconSearch size={13} aria-hidden="true" />
+            <span>{inspectionLabel}</span>
+            {inspectionTone !== 'idle' && (
+              <span className={`${styles.credentialInspectionDot} ${styles[`credentialInspectionDot${capitalize(inspectionTone)}`]}`.trim()} aria-hidden="true" />
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface AuthFileCredentialsSectionProps {
   rows: AuthFileCredentialRow[]
   total: number
@@ -85,6 +184,7 @@ interface AuthFileCredentialsSectionProps {
   proxyPoolsLoading: boolean
   proxyPoolsError: string
   proxyPoolFilterId: string
+  providerFilter?: CredentialProviderFilterKey
   authFileQuery: string
   onPageChange: (page: number) => void
   onPageSizeChange: (pageSize: number) => void
@@ -106,7 +206,7 @@ interface AuthFileCredentialsSectionProps {
   onAuthFileQueryChange: (query: string) => void
 }
 
-export function AuthFileCredentialsSection({ rows, total, page, totalPages, pageSize, activeOnly, sort, loading, quotaRefreshing, quotaRefreshError, quotaAutoRefreshEnabled, quotaInspectionStatus, quotaInspectionLoading, quotaInspectionStarting, quotaInspectionError, authFileCooldownsLoading, authFileCooldownsError, proxyPools, proxyPoolsLoading, proxyPoolFilterId, authFileQuery, onPageChange, onPageSizeChange, onActiveOnlyChange, onSortChange, onRefreshQuota, onRefreshQuotaForAuthIndex, onResetQuotaForAuthIndex, onStartCooldownForAuthFile, onRestoreCooldownForAuthFile, aliasSavingId, onSaveAlias, onSaveNote, onRefreshInspectionStatus, onStartInspection, onAfterInvalidAccountAction, onProxyPoolFilterChange, onApplyProxyPool, onAuthFileQueryChange }: AuthFileCredentialsSectionProps) {
+export function AuthFileCredentialsSection({ rows, total, page, totalPages, pageSize, activeOnly, sort, loading, quotaRefreshing, quotaRefreshError, quotaAutoRefreshEnabled, quotaInspectionStatus, quotaInspectionLoading, quotaInspectionStarting, quotaInspectionError, authFileCooldownsLoading, authFileCooldownsError, proxyPools, proxyPoolsLoading, proxyPoolFilterId, providerFilter = 'all', authFileQuery, onPageChange, onPageSizeChange, onActiveOnlyChange, onSortChange, onRefreshQuota, onRefreshQuotaForAuthIndex, onResetQuotaForAuthIndex, onStartCooldownForAuthFile, onRestoreCooldownForAuthFile, aliasSavingId, onSaveAlias, onSaveNote, onRefreshInspectionStatus, onStartInspection, onAfterInvalidAccountAction, onProxyPoolFilterChange, onApplyProxyPool, onAuthFileQueryChange }: AuthFileCredentialsSectionProps) {
   const { t } = useTranslation()
   const [inspectionOpen, setInspectionOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
@@ -132,7 +232,11 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
 
   useEffect(() => {
     setSelectedAuthIndexes(new Set())
-  }, [page, pageSize, authFileQuery, proxyPoolFilterId])
+  }, [activeOnly, authFileQuery, page, pageSize, providerFilter, proxyPoolFilterId, sort])
+
+  useEffect(() => {
+    setSelectedAuthIndexes((current) => reconcileSelectedAuthIndexes(current, rows))
+  }, [rows])
 
   const [layoutMode, setLayoutMode] = useState<'list' | 'card'>(() => {
     if (typeof window === 'undefined') return 'list'
@@ -140,18 +244,14 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
   })
   const changeLayoutMode = (mode: 'list' | 'card') => {
     setLayoutMode(mode)
+    if (mode === 'card') setSelectedAuthIndexes(new Set())
     window.localStorage?.setItem('cpa.authFiles.layoutMode', mode)
   }
-  const [quickProxyPoolId, setQuickProxyPoolId] = useState('')
-  const [quickProxySubmitting, setQuickProxySubmitting] = useState(false)
-  const [quickProxyError, setQuickProxyError] = useState('')
   const [authFileProxyPoolTestHistory] = useState<ProxyPoolTestHistoryMap>(() => readStoredProxyPoolTestHistory())
   const [cooldownActionAuthIndex, setCooldownActionAuthIndex] = useState('')
   const showHealthMode = displayMode === 'health'
   const canRefresh = rows.some((row) => !isRowRefreshing(row) && !row.identity.is_deleted) && !quotaRefreshing
   const inspectionTone = inspectionIndicatorTone(quotaInspectionStatus)
-  const authFileNames = useMemo(() => rows.map((row) => authFileDeleteName(row)).filter(Boolean), [rows])
-
   const selectedRows = useMemo(() => {
     return rows.filter((row) => selectedAuthIndexes.has(row.identity.identity))
   }, [rows, selectedAuthIndexes])
@@ -257,16 +357,6 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
   ], [proxyPools])
 
   const authFileProxyPoolTestResults = useMemo(() => readProxyPoolTestHistory(authFileProxyPoolTestHistory), [authFileProxyPoolTestHistory])
-  const quickProxyPoolOptions = useMemo(
-    () => proxyPools.map((pool) => ({
-      value: pool.id,
-      label: pool.name,
-      suffix: buildProxyPoolOptionMeta(pool, authFileProxyPoolTestResults[pool.id], authFileProxyPoolTestHistory[pool.id]),
-      suffixAriaLabel: buildProxyPoolOptionMeta(pool, authFileProxyPoolTestResults[pool.id], authFileProxyPoolTestHistory[pool.id]),
-    })),
-    [authFileProxyPoolTestHistory, authFileProxyPoolTestResults, proxyPools]
-  )
-
   const openInspection = () => {
     setInspectionOpen(true)
     void onRefreshInspectionStatus()
@@ -351,20 +441,6 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
       setNoteSubmitting(false)
     }
   }
-  const applyQuickProxyPool = async (proxyPoolId: string | null) => {
-    setQuickProxySubmitting(true)
-    setQuickProxyError('')
-    try {
-      await onApplyProxyPool(authFileNames, proxyPoolId)
-      if (proxyPoolId === null) {
-        setQuickProxyPoolId('')
-      }
-    } catch (nextError) {
-      setQuickProxyError(formatUserActionableError(nextError, '修改认证文件代理失败'))
-    } finally {
-      setQuickProxySubmitting(false)
-    }
-  }
   const confirmDeleteAuthFile = async () => {
     if (!deleteTarget) {
       return
@@ -414,52 +490,42 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
         subtitle={t('usage_stats.credentials_auth_files_subtitle')}
         countLabel={t('usage_stats.credentials_count', { count: total })}
         toolbar={(
-          <div className={styles.credentialAuthFileToolbar}>
-            <div className={styles.credentialAuthFileToolbarPrimary}>
-              <AuthFileDisplayModeSwitch mode={displayMode} onChange={setDisplayMode} />
-              <AuthFileLayoutModeSwitch mode={layoutMode} onChange={changeLayoutMode} />
-              <label className={styles.credentialListSearch}>
-                <IconSearch size={13} />
-                <input
-                  value={authFileQuery}
-                  onChange={(event) => onAuthFileQueryChange(event.target.value)}
-                  placeholder="搜索认证文件"
-                  disabled={loading}
-                />
-              </label>
-              <label className={styles.credentialActiveOnlySwitch}>
-                <span className={styles.credentialActiveOnlyLabel}>{t('usage_stats.credentials_auth_files_active_only')}</span>
-                <input type="checkbox" checked={activeOnly} onChange={(event) => onActiveOnlyChange(event.target.checked)} />
-                <span className={styles.credentialActiveOnlyTrack} aria-hidden="true">
-                  <span className={styles.credentialActiveOnlyThumb} />
-                </span>
-              </label>
-              <div className={styles.credentialProxyPoolFilter}>
-                <span>代理池</span>
-                <Select
-                  value={proxyPoolFilterId}
-                  options={proxyPoolFilterOptions}
-                  onChange={onProxyPoolFilterChange}
-                  disabled={proxyPoolsLoading}
-                  className={styles.credentialProxyPoolSelect}
-                  fullWidth={false}
-                />
+          <div className={styles.credentialAuthFileToolbar} role="toolbar" aria-label="认证文件操作">
+            <div className={styles.credentialAuthFileFilterRow} role="search" aria-label="筛选认证文件">
+              <div className={styles.credentialAuthFileFilterControls}>
+                <label className={styles.credentialListSearch}>
+                  <IconSearch size={13} />
+                  <input
+                    value={authFileQuery}
+                    onChange={(event) => onAuthFileQueryChange(event.target.value)}
+                    placeholder="搜索认证文件"
+                    disabled={loading}
+                  />
+                </label>
+                <label className={styles.credentialActiveOnlySwitch}>
+                  <span className={styles.credentialActiveOnlyLabel}>{t('usage_stats.credentials_auth_files_active_only')}</span>
+                  <input type="checkbox" checked={activeOnly} onChange={(event) => onActiveOnlyChange(event.target.checked)} />
+                  <span className={styles.credentialActiveOnlyTrack} aria-hidden="true">
+                    <span className={styles.credentialActiveOnlyThumb} />
+                  </span>
+                </label>
+                <div className={styles.credentialProxyPoolFilter}>
+                  <span>代理池</span>
+                  <Select
+                    value={proxyPoolFilterId}
+                    options={proxyPoolFilterOptions}
+                    onChange={onProxyPoolFilterChange}
+                    disabled={proxyPoolsLoading}
+                    className={styles.credentialProxyPoolSelect}
+                    fullWidth={false}
+                  />
+                </div>
               </div>
             </div>
-            <div className={styles.credentialAuthFileToolbarSecondary}>
-              <div className={styles.credentialQuickProxySetter}>
-                <Select
-                  value={quickProxyPoolId}
-                  options={quickProxyPoolOptions}
-                  onChange={setQuickProxyPoolId}
-                  placeholder="批量设置代理"
-                  disabled={proxyPoolsLoading || quickProxySubmitting}
-                  className={styles.credentialQuickProxySelect}
-                  fullWidth={false}
-                  dropdownMinWidth={360}
-                />
-                <button type="button" onClick={() => void applyQuickProxyPool(quickProxyPoolId)} disabled={quickProxySubmitting || quickProxyPoolId === '' || authFileNames.length === 0}>应用</button>
-                <button type="button" onClick={() => void applyQuickProxyPool(null)} disabled={quickProxySubmitting || authFileNames.length === 0}>清空</button>
+            <div className={styles.credentialAuthFileToolbarEnd}>
+              <div className={styles.credentialAuthFileViewControls} role="group" aria-label="认证文件显示方式">
+                <AuthFileDisplayModeSwitch mode={displayMode} onChange={setDisplayMode} />
+                <AuthFileLayoutModeSwitch mode={layoutMode} onChange={changeLayoutMode} />
               </div>
               <div className={styles.credentialSectionActionButtons}>
                 <button
@@ -474,19 +540,7 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
                 </button>
                 <button
                   type="button"
-                  className={`${styles.credentialToolbarButton} ${styles.credentialInspectionButton}`.trim()}
-                  onClick={openInspection}
-                  aria-pressed={inspectionTone !== 'idle'}
-                >
-                  <span className={styles.credentialRefreshButtonInner}>
-                    <IconSearch size={12} />
-                    <span>{t('usage_stats.credentials_inspection_open')}</span>
-                    {inspectionTone !== 'idle' && <span className={`${styles.credentialInspectionDot} ${styles[`credentialInspectionDot${capitalize(inspectionTone)}`]}`.trim()} aria-hidden="true" />}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.credentialToolbarButton} ${styles.credentialToolbarButtonPrimary} ${quotaRefreshing ? styles.credentialRefreshButtonLoading : ''}`.trim()}
+                  className={`${styles.credentialToolbarButton} ${quotaRefreshing ? styles.credentialRefreshButtonLoading : ''}`.trim()}
                   onClick={() => void onRefreshQuota()}
                   disabled={!canRefresh}
                   aria-busy={quotaRefreshing}
@@ -496,13 +550,17 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
                     <span>{quotaRefreshing ? t('usage_stats.credentials_quota_refreshing') : t('usage_stats.credentials_quota_refresh_current_page')}</span>
                   </span>
                 </button>
+                <AuthFileMoreActionsMenu
+                  inspectionTone={inspectionTone}
+                  inspectionLabel={t('usage_stats.credentials_inspection_open')}
+                  onOpenInspection={openInspection}
+                />
               </div>
             </div>
           </div>
         )}
       >
       {/* 批量刷新失败显示在区块顶部，单行任务失败显示在对应限额位置。 */}
-      {quickProxyError && <div className={styles.credentialInlineError}>{quickProxyError}</div>}
       {quotaRefreshError && <div className={styles.credentialInlineError}>{quotaRefreshError}</div>}
       {authFileCooldownsError && <div className={styles.credentialInlineError}>{authFileCooldownsError}</div>}
       {loading && rows.length === 0 && <div className={styles.credentialEmptyState}>{t('common.loading')}</div>}
@@ -648,10 +706,10 @@ export function AuthFileCredentialsSection({ rows, total, page, totalPages, page
             badges={null}
             metrics={(
               <>
-                <MetricPill value={<RequestMetric total={row.totalRequests} success={row.successCount} failure={row.failureCount} />} />
-                <MetricPill value={<TonePercent value={row.successRate} tone={successRateTone(row.successRate)} />} />
-                <MetricPill value={formatCredentialNumber(row.totalTokens)} />
-                <MetricPill value={<TonePercent value={row.cacheRate} tone={cacheRateTone(row.cacheRate)} />} />
+                <MetricPill label={t('usage_stats.total_requests')} value={<RequestMetric total={row.totalRequests} success={row.successCount} failure={row.failureCount} />} />
+                <MetricPill label={t('usage_stats.success_rate')} value={<TonePercent value={row.successRate} tone={successRateTone(row.successRate)} />} />
+                <MetricPill label={t('usage_stats.total_tokens')} value={formatCredentialNumber(row.totalTokens)} />
+                <MetricPill label={t('usage_stats.cache_rate')} value={<TonePercent value={row.cacheRate} tone={cacheRateTone(row.cacheRate)} />} />
               </>
             )}
             rowClassName={layoutMode === 'card' ? styles.authFileCredentialCardItem : styles.authFileCredentialRow}

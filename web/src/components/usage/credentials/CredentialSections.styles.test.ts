@@ -16,6 +16,11 @@ const cssBlock = (selector: string) => {
 }
 
 describe('Credential section styles', () => {
+  it('keeps the Auth Files search focus ring on the composite field only', () => {
+    expect(credentialStyles).toMatch(/\.credentialListSearch\s*\{[\s\S]*?input:not\(\[type='checkbox'\]\):not\(\[type='radio'\]\)\s*\{[\s\S]*?border:\s*0 !important;/)
+    expect(credentialStyles).toMatch(/\.credentialListSearch\s*\{[\s\S]*?input:not\(\[type='checkbox'\]\):not\(\[type='radio'\]\)\s*\{[\s\S]*?&:focus\s*\{[\s\S]*?box-shadow:\s*none !important;/)
+  })
+
   it('keeps Auth Files and AI Provider row sizing separate', () => {
     expect(credentialStyles).toMatch(/\.authFileCredentialRow\s*\{[\s\S]*?grid-template-columns:\s*220px minmax\(0, 400px\) minmax\(520px, 1fr\);/)
     expect(credentialStyles).toMatch(/\.authFileCredentialRow\s*\{[\s\S]*?\.credentialIdentityBlock\s*\{[\s\S]*?max-width:\s*220px;/)
@@ -90,26 +95,25 @@ describe('Credential section styles', () => {
     expect(credentialHealthSource).toContain('IconRefreshCw')
   })
 
-  it('uses a nested Auth Files active-only switch that matches the project pill controls', () => {
+  it('uses a nested Auth Files active-only switch aligned with the console palette', () => {
     expect(authFileSectionSource).toContain('credentialActiveOnlyLabel')
     expect(authFileSectionSource).toContain('credentialActiveOnlyTrack')
     expect(authFileSectionSource).toContain('credentialActiveOnlyThumb')
     expect(authFileSectionSource).toMatch(/credentialActiveOnlyLabel[\s\S]*?credentials_auth_files_active_only[\s\S]*?type="checkbox"[\s\S]*?credentialActiveOnlyTrack/)
-    expect(credentialStyles).toMatch(/\.credentialActiveOnlySwitch\s*\{[\s\S]*?min-height:\s*32px;/)
-    expect(credentialStyles).toMatch(/\.credentialActiveOnlySwitch\s*\{[\s\S]*?padding:\s*3px 5px 3px 10px;/)
-    expect(credentialStyles).toMatch(/\.credentialActiveOnlySwitch\s*\{[\s\S]*?border:\s*1px solid var\(--border-color\);/)
-    expect(credentialStyles).toMatch(/\.credentialActiveOnlySwitch\s*\{[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-secondary\) 78%, transparent\);/)
-    expect(cssBlock('.credentialActiveOnlySwitch')).toContain('color: var(--text-primary);')
+    expect(credentialStyles).toMatch(/\.credentialActiveOnlySwitch\s*\{[\s\S]*?min-height:\s*38px;/)
+    expect(credentialStyles).toMatch(/\.credentialActiveOnlySwitch\s*\{[\s\S]*?padding:\s*3px 8px 3px 12px;/)
+    expect(credentialStyles).toMatch(/\.credentialActiveOnlySwitch\s*\{[\s\S]*?border:\s*1px solid var\(--aw-line-strong\);/)
+    expect(credentialStyles).toMatch(/\.credentialActiveOnlySwitch\s*\{[\s\S]*?background:\s*var\(--aw-panel-soft\);/)
+    expect(cssBlock('.credentialActiveOnlySwitch')).toContain('color: var(--aw-text);')
     expect(cssBlock('.credentialActiveOnlySwitch')).not.toContain('color: #2d2a26;')
     expect(themeStyles).toMatch(/:root\s*\{[\s\S]*?--text-primary:\s*#0f172a;/)
     expect(themeStyles).toMatch(/\[data-theme='white'\]\s*\{[\s\S]*?--text-primary:\s*#0f172a;/)
     expect(cssBlock('.credentialActiveOnlySwitch')).toContain('font-size: 11px;')
     expect(cssBlock('.credentialActiveOnlySwitch')).not.toContain('font-size: 12px;')
-    expect(credentialStyles).toMatch(/\.credentialActiveOnlySwitch\s*\{[\s\S]*?box-shadow:\s*inset 0 1px 0 rgba\(255, 255, 255, 0\.06\);/)
-    expect(credentialStyles).toMatch(/\.credentialActiveOnlyThumb\s*\{[\s\S]*?background:\s*linear-gradient\(145deg, #fff, color-mix\(in srgb, var\(--bg-primary\) 86%, #dbeafe\)\);/)
-    expect(credentialStyles).toMatch(/input:checked \+ \.credentialActiveOnlyTrack\s*\{[\s\S]*?#2563eb/)
-    expect(credentialStyles).toMatch(/input:checked \+ \.credentialActiveOnlyTrack\s*\{[\s\S]*?#38bdf8/)
-    expect(credentialStyles).toMatch(/input:checked \+ \.credentialActiveOnlyTrack\s*\{[\s\S]*?#67e8f9/)
+    expect(credentialStyles).toMatch(/\.credentialActiveOnlySwitch\s*\{[\s\S]*?box-shadow:\s*none;/)
+    expect(credentialStyles).toMatch(/\.credentialActiveOnlyThumb\s*\{[\s\S]*?background:\s*var\(--aw-panel\);/)
+    expect(credentialStyles).toMatch(/input:checked \+ \.credentialActiveOnlyTrack\s*\{[\s\S]*?border-color:\s*var\(--aw-ink\);/)
+    expect(credentialStyles).toMatch(/input:checked \+ \.credentialActiveOnlyTrack\s*\{[\s\S]*?background:\s*var\(--aw-ink\);/)
     expect(credentialStyles).toMatch(/input:checked \+ \.credentialActiveOnlyTrack \.credentialActiveOnlyThumb\s*\{[\s\S]*?transform:\s*translateX\(18px\);/)
     expect(cssBlock('.credentialActiveOnlyTrack')).not.toContain('backdrop-filter')
     expect(cssBlock('.credentialActiveOnlyTrack')).not.toContain('box-shadow')
@@ -192,23 +196,28 @@ describe('Credential section styles', () => {
     expect(aiProviderSectionSource).toContain('row.priorityLabel')
   })
 
-  it('keeps Auth Files task controls in one toolbar with clear primary actions', () => {
+  it('keeps Auth Files filters, view controls, and actions in one responsive toolbar', () => {
     expect(credentialShellSource).toContain('toolbar?: ReactNode')
     expect(credentialShellSource).toContain('credentialSectionToolbar')
     expect(authFileSectionSource).toContain('toolbar={(')
-    expect(authFileSectionSource).toContain('credentialAuthFileToolbarPrimary')
-    expect(authFileSectionSource).toContain('credentialAuthFileToolbarSecondary')
-    expect(authFileSectionSource).toMatch(/<AuthFileDisplayModeSwitch[\s\S]*?credentialListSearch[\s\S]*?credentialActiveOnlySwitch[\s\S]*?credentialProxyPoolFilter/)
+    expect(authFileSectionSource).toContain('credentialAuthFileFilterRow')
+    expect(authFileSectionSource).toContain('credentialAuthFileToolbarEnd')
+    expect(authFileSectionSource).toMatch(/credentialListSearch[\s\S]*?credentialActiveOnlySwitch[\s\S]*?credentialProxyPoolFilter[\s\S]*?<AuthFileDisplayModeSwitch[\s\S]*?<AuthFileLayoutModeSwitch/)
     expect(authFileSectionSource).toContain('onAuthFileQueryChange')
-    expect(authFileSectionSource).toMatch(/credentialQuickProxySetter[\s\S]*?credentialInspectionButton[\s\S]*?credentialToolbarButtonPrimary/)
+    expect(authFileSectionSource).not.toContain('credentialQuickProxySetter')
+    expect(authFileSectionSource).not.toContain('applyQuickProxyPool')
+    expect(authFileSectionSource).toMatch(/credentials_auth_file_import_open[\s\S]*?credentials_quota_refresh_current_page[\s\S]*?<AuthFileMoreActionsMenu/)
+    expect(authFileSectionSource).toContain('aria-haspopup="menu"')
+    expect(authFileSectionSource).toContain('role="menuitem"')
     expect(authFileSectionSource).not.toContain('setProxyManagerOpen')
     expect(authFileSectionSource).not.toContain('ProxyPoolModal')
     expect(authFileSectionSource).toContain('credentialSectionActionButtons')
-    expect(authFileSectionSource).toContain('credentialInspectionButton')
-    expect(credentialStyles).toMatch(/\.credentialSectionToolbar\s*\{[\s\S]*?padding:\s*10px 22px;/)
-    expect(credentialStyles).toMatch(/\.credentialAuthFileToolbar\s*\{[\s\S]*?justify-content:\s*space-between;/)
+    expect(credentialStyles).toMatch(/\.credentialSectionToolbar\s*\{[\s\S]*?padding:\s*12px 22px;/)
+    expect(credentialStyles).toMatch(/\.credentialAuthFileToolbar\s*\{[\s\S]*?display:\s*flex;/)
+    expect(credentialStyles).toMatch(/\.credentialAuthFileToolbarEnd\s*\{[\s\S]*?flex:\s*0 0 auto;/)
     expect(credentialStyles).toMatch(/\.credentialToolbarButton\s*\{[\s\S]*?border-radius:\s*8px;/)
-    expect(credentialStyles).toMatch(/\.credentialToolbarButtonPrimary\s*\{[\s\S]*?background:\s*color-mix\(in srgb, var\(--primary-color\) 10%, var\(--bg-primary\)\);/)
+    expect(credentialStyles).toMatch(/\.credentialToolbarButtonPrimary\s*\{[\s\S]*?background:\s*var\(--aw-ink\);/)
+    expect(credentialStyles).toMatch(/\.credentialMoreActionsMenu\s*\{[\s\S]*?position:\s*absolute;/)
     expect(credentialStyles).toMatch(/\.credentialInspectionProgressTrack\s*\{[\s\S]*?height:\s*8px;/)
     expect(credentialStyles).toMatch(/\.credentialInspectionProgressTrack\s*\{[\s\S]*?background:\s*var\(--bg-tertiary\);/)
     expect(credentialStyles).toMatch(/\.credentialInspectionProgressTrack\s*\{[\s\S]*?border:\s*1px solid var\(--border-color\);/)
@@ -299,7 +308,7 @@ describe('Credential section styles', () => {
     expect(credentialHealthSource).toContain('HEALTH_BUCKET_COUNT = HEALTH_WINDOW_MINUTES / HEALTH_BUCKET_MINUTES')
   })
 
-  it('renders credential metrics under a shared table header instead of repeating row labels', () => {
+  it('renders shared desktop metric headers and reveals row labels on mobile', () => {
     expect(credentialShellSource).toContain('CredentialTableHeader')
     expect(authFileSectionSource).toContain('<CredentialTableHeader')
     expect(aiProviderSectionSource).toContain('<CredentialTableHeader')
@@ -317,7 +326,10 @@ describe('Credential section styles', () => {
     expect(credentialShellSource).not.toContain('--credential-request-metric-width')
     expect(authFileSectionSource).not.toContain('buildCredentialRequestMetricStyle')
     expect(aiProviderSectionSource).not.toContain('buildCredentialRequestMetricStyle')
-    expect(credentialShellSource).not.toContain('credentialMetricLabel')
+    expect(credentialShellSource).toContain('className={styles.credentialMetricHeaderCell}')
+    expect(credentialShellSource).toContain('className={styles.credentialMetricLabel}')
+    expect(credentialStyles).toMatch(/\.credentialMetricLabel\s*\{[\s\S]*?display:\s*none;/)
+    expect(credentialStyles).toMatch(/@include mobile\s*\{\s*\.credentialTableHeader\.authFileCredentialRow,[\s\S]*?\.credentialMetricLabel\s*\{\s*display:\s*block;/)
     expect(credentialStyles).toMatch(/\.credentialMetricValueCell\s*\{[\s\S]*?white-space:\s*normal;/)
     expect(credentialStyles).toMatch(/\.credentialRequestMetric\s*\{[\s\S]*?align-items:\s*baseline;/)
     expect(credentialStyles).toMatch(/\.credentialRequestMetric\s*\{[\s\S]*?flex-wrap:\s*wrap;/)
@@ -340,6 +352,15 @@ describe('Credential section styles', () => {
     expect(credentialStyles).toMatch(/@include mobile\s*\{[\s\S]*?\.credentialPaginationControls\s*\{[\s\S]*?width:\s*max-content;/)
     expect(credentialStyles).toMatch(/@include mobile\s*\{[\s\S]*?\.credentialQuotaModeControl[\s\S]*?\.credentialPageSizeControl\s*\{[\s\S]*?flex:\s*0 0 auto;/)
     expect(credentialStyles).toMatch(/@include mobile\s*\{[\s\S]*?\.credentialPageSizeControl\s*\{[\s\S]*?flex:\s*0 0 auto;/)
+  })
+
+  it('keeps the batch action bar inaccessible while hidden and aligned with the Watchmen palette', () => {
+    expect(credentialStyles).toMatch(/\.batchActionBar\s*\{[\s\S]*?visibility:\s*hidden;/)
+    expect(credentialStyles).toMatch(/\.batchActionBar\s*\{[\s\S]*?background:\s*var\(--aw-panel\);/)
+    expect(credentialStyles).toMatch(/\.batchActionBar\s*\{[\s\S]*?border-radius:\s*8px;/)
+    expect(credentialStyles).toMatch(/\.batchActionBarActive\s*\{[\s\S]*?visibility:\s*visible;/)
+    expect(cssBlock('.batchActionBtnPrimary')).toContain('background: var(--aw-ink);')
+    expect(credentialStyles).not.toContain('rgba(139, 92, 246')
   })
 
   it('keeps plan and remaining-day badges readable in dark mode', () => {

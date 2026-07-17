@@ -1,17 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { IconEye, IconEyeOff, IconTrash2 } from '@/components/ui/icons';
+import { IconEye, IconEyeOff, IconPencil, IconTrash2 } from '@/components/ui/icons';
 import type { CpaApiKeySettingsItem } from '@/lib/types';
-import { scheduleEffectTask } from '@/utils/effects';
+import { CredentialSectionShell } from '@/components/usage/credentials/CredentialSectionShell';
 import styles from '@/pages/UsagePage.module.scss';
-
-interface CpaApiKeyDraft {
-  keyAlias: string;
-  apiKey: string;
-}
+import { CpaApiKeyDeleteDialog, CpaApiKeyEditorDialog, type CpaApiKeyDraft } from './CpaApiKeyManagerDialogs';
 
 type ClipboardWriter = Pick<Clipboard, 'writeText'>;
 type CopyTextArea = {
@@ -106,21 +100,16 @@ export function CpaApiKeyManagerCard({
   onNotice,
 }: CpaApiKeyManagerCardProps) {
   const { t } = useTranslation();
-  const [showFullApiKeys, setShowFullApiKeys] = useState(false);
-  const [newDraft, setNewDraft] = useState<CpaApiKeyDraft>(emptyDraft);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createDraft, setCreateDraft] = useState<CpaApiKeyDraft>(emptyDraft);
+  const [editTarget, setEditTarget] = useState<CpaApiKeySettingsItem | null>(null);
+  const [editDraft, setEditDraft] = useState<CpaApiKeyDraft>(emptyDraft);
+  const [deleteTarget, setDeleteTarget] = useState<CpaApiKeySettingsItem | null>(null);
+  const [formError, setFormError] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [visibleApiKeyIds, setVisibleApiKeyIds] = useState<Set<string>>(() => new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const initialDrafts = useMemo(
-    () => Object.fromEntries(apiKeys.map((item) => [item.id, { keyAlias: item.keyAlias, apiKey: item.apiKey }])),
-    [apiKeys],
-  );
-  const [drafts, setDrafts] = useState<Record<string, CpaApiKeyDraft>>(initialDrafts);
-
-  useEffect(() => {
-    return scheduleEffectTask(() => {
-      setDrafts(initialDrafts);
-    });
-  }, [initialDrafts]);
 
   useEffect(() => () => {
     if (copyResetTimerRef.current) {
@@ -129,17 +118,58 @@ export function CpaApiKeyManagerCard({
   }, []);
 
   const handleCreate = useCallback(async () => {
-    const draft = { keyAlias: newDraft.keyAlias.trim(), apiKey: newDraft.apiKey.trim() };
+    const draft = { keyAlias: createDraft.keyAlias.trim(), apiKey: createDraft.apiKey.trim() };
     if (!getCpaApiKeyManagerCanSave(draft)) {
+      setFormError(t('usage_stats.cpa_api_key_required'));
       return;
     }
+    setFormError('');
     try {
       await onCreate(draft.keyAlias, draft.apiKey);
-      setNewDraft(emptyDraft);
+      setCreateDraft(emptyDraft);
+      setCreateOpen(false);
     } catch {
-      // The page-level handler owns the visible error state.
+      setFormError(t('usage_stats.cpa_api_key_create_failed'));
     }
-  }, [newDraft.apiKey, newDraft.keyAlias, onCreate]);
+  }, [createDraft.apiKey, createDraft.keyAlias, onCreate, t]);
+
+  const handleSave = useCallback(async () => {
+    if (!editTarget) return;
+    const draft = { keyAlias: editDraft.keyAlias.trim(), apiKey: editDraft.apiKey.trim() };
+    if (!getCpaApiKeyManagerCanSave(draft)) {
+      setFormError(t('usage_stats.cpa_api_key_required'));
+      return;
+    }
+    setFormError('');
+    try {
+      await onSave(editTarget.id, draft.keyAlias, draft.apiKey);
+      setEditDraft(emptyDraft);
+      setEditTarget(null);
+      setVisibleApiKeyIds((current) => {
+        const next = new Set(current);
+        next.delete(editTarget.id);
+        return next;
+      });
+    } catch {
+      setFormError(t('usage_stats.cpa_api_key_save_failed'));
+    }
+  }, [editDraft.apiKey, editDraft.keyAlias, editTarget, onSave, t]);
+
+  const handleDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    setDeleteError('');
+    try {
+      await onDelete(deleteTarget.id);
+      setVisibleApiKeyIds((current) => {
+        const next = new Set(current);
+        next.delete(deleteTarget.id);
+        return next;
+      });
+      setDeleteTarget(null);
+    } catch {
+      setDeleteError(t('usage_stats.cpa_api_key_delete_failed'));
+    }
+  }, [deleteTarget, onDelete, t]);
 
   const handleCopyApiKey = useCallback(async (item: CpaApiKeySettingsItem) => {
     try {
@@ -156,142 +186,64 @@ export function CpaApiKeyManagerCard({
     }
   }, [onNotice, t]);
 
-  const canCreate = getCpaApiKeyManagerCanSave(newDraft);
-  const keyInputType = showFullApiKeys ? 'text' : 'password';
-  const toggleLabel = showFullApiKeys ? t('usage_stats.api_key_settings_hide_full') : t('usage_stats.api_key_settings_show_full');
-
   return (
-    <Card
-      title={
-        <div className={styles.sectionTitleBlock}>
-          <div className={styles.apiKeySettingsTitleRow}>
-            <h3 className={styles.sectionTitle}>{t('usage_stats.cpa_api_key_manager_title')}</h3>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={`${styles.apiKeyVisibilityToggle} ${showFullApiKeys ? styles.apiKeyVisibilityToggleActive : ''}`.trim()}
-              onClick={() => setShowFullApiKeys((current) => !current)}
-              aria-label={toggleLabel}
-              aria-pressed={showFullApiKeys}
-              title={toggleLabel}
-            >
-              {showFullApiKeys ? <IconEye size={16} /> : <IconEyeOff size={16} />}
-            </Button>
-          </div>
-          <p className={styles.sectionSubtitle}>{t('usage_stats.cpa_api_key_manager_subtitle')}</p>
-        </div>
-      }
-      className={`${styles.cpaManagerCard} ${styles.cpaApiKeyManagerCard}`}
-    >
-      <div className={styles.cpaApiKeyManagerBody}>
-        <div className={styles.cpaApiKeyCreateRow}>
-          <Input
-            value={newDraft.keyAlias}
-            onChange={(event) => setNewDraft((current) => ({ ...current, keyAlias: event.target.value }))}
-            label={t('usage_stats.cpa_api_key_name')}
-            placeholder={t('usage_stats.cpa_api_key_name_placeholder')}
-            disabled={creating}
-          />
-          <Input
-            value={newDraft.apiKey}
-            onChange={(event) => setNewDraft((current) => ({ ...current, apiKey: event.target.value }))}
-            type={keyInputType}
-            label={t('usage_stats.cpa_api_key_value')}
-            placeholder={t('usage_stats.cpa_api_key_value_placeholder')}
-            disabled={creating}
-            autoComplete="off"
-          />
-          <Button type="button" variant="primary" onClick={() => void handleCreate()} loading={creating} disabled={!canCreate}>
-            {t('usage_stats.cpa_api_key_create')}
+    <>
+      <CredentialSectionShell
+        title={t('usage_stats.cpa_api_key_manager_title')}
+        subtitle={t('usage_stats.cpa_api_key_manager_subtitle')}
+        countLabel={t('usage_stats.credentials_count', { count: apiKeys.length })}
+        actions={(
+          <Button type="button" variant="primary" className={styles.cpaApiKeyHeaderCreate} onClick={() => { setFormError(''); setCreateOpen(true); }} disabled={creating}>
+            {t('usage_stats.cpa_api_key_create_action')}
           </Button>
-        </div>
-
-        {loading && apiKeys.length === 0 ? (
-          <div className={styles.hint}>{t('common.loading')}</div>
-        ) : apiKeys.length === 0 ? (
-          <div className={styles.hint}>{t('usage_stats.cpa_api_key_manager_empty')}</div>
-        ) : (
-          <div className={styles.cpaApiKeyManagerList}>
-            <div className={styles.cpaApiKeyListHeader}>
-              <span>{t('usage_stats.cpa_api_key_name')}</span>
-              <span>{t('usage_stats.cpa_api_key_value')}</span>
-              <span style={{ textAlign: 'right', paddingRight: '12px' }}>{t('common.actions') || '操作'}</span>
-            </div>
-            {apiKeys.map((item) => {
-              const draft = drafts[item.id] ?? { keyAlias: item.keyAlias, apiKey: item.apiKey };
-              const busy = savingId === item.id || deletingId === item.id;
-              const canSave = getCpaApiKeyManagerCanSave(draft);
-              const copyLabel = copiedId === item.id ? t('usage_stats.api_key_settings_copied') : t('usage_stats.api_key_settings_copy');
-              return (
-                <div key={item.id} className={styles.cpaApiKeyManagerItem}>
-                  <div className={styles.cpaApiKeyColName}>
-                    <Input
-                      value={draft.keyAlias}
-                      onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: { ...draft, keyAlias: event.target.value } }))}
-                      label={t('usage_stats.cpa_api_key_name')}
-                      disabled={busy}
-                    />
-                  </div>
-                  <div className={styles.cpaApiKeyColKey}>
-                    {showFullApiKeys ? (
-                      <Input
-                        value={draft.apiKey}
-                        onChange={(event) => setDrafts((current) => ({ ...current, [item.id]: { ...draft, apiKey: event.target.value } }))}
-                        type="text"
-                        label={t('usage_stats.cpa_api_key_value')}
-                        disabled={busy}
-                        autoComplete="off"
-                      />
-                    ) : (
-                      <div className={styles.cpaApiKeyMaskedField}>
-                        <span>{t('usage_stats.cpa_api_key_value')}</span>
-                        <strong title={item.displayKey}>{item.displayKey}</strong>
-                      </div>
-                    )}
-                  </div>
-                  <div className={styles.cpaApiKeyManagerActions}>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => void handleCopyApiKey(item)}
-                      disabled={!item.apiKey || busy}
-                    >
-                      {copyLabel}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="primary"
-                      size="sm"
-                      onClick={() => void onSave(item.id, draft.keyAlias, draft.apiKey)}
-                      loading={savingId === item.id}
-                      disabled={!canSave || deletingId === item.id}
-                    >
-                      {t('common.save')}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="danger"
-                      size="sm"
-                      onClick={() => {
-                        if (typeof window === 'undefined' || window.confirm(t('usage_stats.cpa_api_key_delete_confirm'))) {
-                          void onDelete(item.id);
-                        }
-                      }}
-                      loading={deletingId === item.id}
-                      disabled={savingId === item.id}
-                      title={t('usage_stats.cpa_api_key_delete')}
-                    >
-                      <IconTrash2 size={13} />
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         )}
-      </div>
-    </Card>
+      >
+        {loading && apiKeys.length === 0 ? <div className={styles.cpaApiKeyEmptyState}>{t('common.loading')}</div> : null}
+        {!loading && apiKeys.length === 0 ? <div className={styles.cpaApiKeyEmptyState}>{t('usage_stats.cpa_api_key_manager_empty')}</div> : null}
+        {apiKeys.map((item) => {
+          const busy = savingId === item.id || deletingId === item.id;
+          const visible = visibleApiKeyIds.has(item.id);
+          const visibilityLabel = visible ? t('usage_stats.cpa_api_key_hide_value') : t('usage_stats.cpa_api_key_show_value');
+          const copyLabel = copiedId === item.id ? t('usage_stats.api_key_settings_copied') : t('usage_stats.api_key_settings_copy');
+          return (
+            <article key={item.id} className={styles.cpaApiKeyRow}>
+              <div className={styles.cpaApiKeyIdentity}>
+                <span className={styles.cpaApiKeyFieldLabel}>{t('usage_stats.cpa_api_key_name')}</span>
+                <strong>{item.keyAlias}</strong>
+              </div>
+              <div className={styles.cpaApiKeySecret}>
+                <span className={styles.cpaApiKeyFieldLabel}>{t('usage_stats.cpa_api_key_value')}</span>
+                <code>{visible ? item.apiKey : item.displayKey}</code>
+              </div>
+              <div className={styles.cpaApiKeyActions} role="group" aria-label={t('common.actions')}>
+                <Button type="button" variant="secondary" size="sm" onClick={() => void handleCopyApiKey(item)} disabled={!item.apiKey || busy}>
+                  {copyLabel}
+                </Button>
+                <Button type="button" variant="ghost" size="sm" className={styles.cpaApiKeyIconAction} onClick={() => setVisibleApiKeyIds((current) => {
+                  const next = new Set(current);
+                  if (visible) next.delete(item.id); else next.add(item.id);
+                  return next;
+                })} disabled={busy} aria-label={visibilityLabel} aria-pressed={visible} title={visibilityLabel}>
+                  {visible ? <IconEyeOff size={15} /> : <IconEye size={15} />}
+                </Button>
+                <Button type="button" variant="ghost" size="sm" className={styles.cpaApiKeyIconAction} onClick={() => {
+                  setFormError('');
+                  setEditDraft({ keyAlias: item.keyAlias, apiKey: item.apiKey });
+                  setEditTarget(item);
+                }} disabled={busy} aria-label={t('common.edit')} title={t('common.edit')}>
+                  <IconPencil size={15} />
+                </Button>
+                <Button type="button" variant="danger" size="sm" className={styles.cpaApiKeyIconAction} onClick={() => { setDeleteError(''); setDeleteTarget(item); }} disabled={busy} aria-label={t('common.delete')} title={t('common.delete')}>
+                  <IconTrash2 size={15} />
+                </Button>
+              </div>
+            </article>
+          );
+        })}
+      </CredentialSectionShell>
+      <CpaApiKeyEditorDialog key={createOpen ? 'create-open' : 'create-closed'} open={createOpen} title={t('usage_stats.cpa_api_key_create_title')} draft={createDraft} error={formError} submitting={creating} submitLabel={t('usage_stats.cpa_api_key_create')} cancelLabel={t('common.cancel')} nameLabel={t('usage_stats.cpa_api_key_name')} namePlaceholder={t('usage_stats.cpa_api_key_name_placeholder')} keyLabel={t('usage_stats.cpa_api_key_value')} keyPlaceholder={t('usage_stats.cpa_api_key_value_placeholder')} showKeyLabel={t('usage_stats.cpa_api_key_show_value')} hideKeyLabel={t('usage_stats.cpa_api_key_hide_value')} onDraftChange={setCreateDraft} onClose={() => { if (creating) return; setCreateDraft(emptyDraft); setFormError(''); setCreateOpen(false); }} onSubmit={() => void handleCreate()} />
+      <CpaApiKeyEditorDialog key={editTarget?.id ?? 'edit-closed'} open={editTarget !== null} title={t('usage_stats.cpa_api_key_edit_title')} draft={editDraft} error={formError} submitting={savingId === editTarget?.id} submitLabel={t('common.save')} cancelLabel={t('common.cancel')} nameLabel={t('usage_stats.cpa_api_key_name')} namePlaceholder={t('usage_stats.cpa_api_key_name_placeholder')} keyLabel={t('usage_stats.cpa_api_key_value')} keyPlaceholder={t('usage_stats.cpa_api_key_value_placeholder')} showKeyLabel={t('usage_stats.cpa_api_key_show_value')} hideKeyLabel={t('usage_stats.cpa_api_key_hide_value')} onDraftChange={setEditDraft} onClose={() => { if (savingId === editTarget?.id) return; setEditDraft(emptyDraft); setEditTarget(null); setFormError(''); }} onSubmit={() => void handleSave()} />
+      <CpaApiKeyDeleteDialog target={deleteTarget} error={deleteError} deleting={deletingId === deleteTarget?.id} title={t('usage_stats.cpa_api_key_delete_title')} body={t('usage_stats.cpa_api_key_delete_dialog_body')} cancelLabel={t('common.cancel')} deleteLabel={t('common.delete')} onClose={() => { if (deletingId !== deleteTarget?.id) setDeleteTarget(null); }} onConfirm={() => void handleDelete()} />
+    </>
   );
 }

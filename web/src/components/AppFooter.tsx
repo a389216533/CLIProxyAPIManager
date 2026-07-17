@@ -46,7 +46,7 @@ export function AppFooter({ version: fixedVersion, loadVersion = true }: { versi
     <footer className="app-footer">
       <div className="app-footer-line app-footer-meta">
         <span>© 2026</span>
-        <a href={GITHUB_REPOSITORY_URL} target="_blank" rel="noreferrer">CLIProxyAPIManager</a>
+        <a href={GITHUB_REPOSITORY_URL} target="_blank" rel="noreferrer">CPA Manager</a>
         <span>·</span>
         <a href={`${GITHUB_REPOSITORY_URL}/blob/main/LICENSE`} target="_blank" rel="noreferrer">License</a>
         <span>·</span>

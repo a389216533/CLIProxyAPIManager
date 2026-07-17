@@ -8,6 +8,11 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import {
   IconChevronLeft,
+  IconExternalLink,
+  IconKey,
+  IconLogOut,
+  IconMenu,
+  IconMoreHorizontal,
   IconRefreshCw,
   IconSettings,
   IconSidebarConfig,
@@ -17,6 +22,7 @@ import {
   IconSidebarProviders,
   IconSidebarQuota,
   IconSidebarSystem,
+  IconX,
 } from '@/components/ui/icons';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
@@ -39,6 +45,7 @@ import {
   UsageProxyPoolsTab,
   UsageConfigDiagnosticsTab,
   UsageCpaManagerTab,
+  UsageApiKeysTab,
   UsageSettingsTab,
 } from './usage';
 import { buildUsageRangeQuery } from '@/utils/usage/rangeQuery';
@@ -72,7 +79,7 @@ const THEME_OPTIONS: ReadonlyArray<{ value: Theme; labelKey: string }> = [
   { value: 'dark', labelKey: 'usage_stats.theme_dark' },
   { value: 'auto', labelKey: 'usage_stats.theme_auto' }
 ];
-const USAGE_TAB_OPTIONS = ['overview', 'events', 'auth-files', 'proxy-pools', 'ai-provider', 'config-diagnostics', 'cpa-manager', 'settings'] as const;
+const USAGE_TAB_OPTIONS = ['overview', 'events', 'api-keys', 'auth-files', 'proxy-pools', 'ai-provider', 'config-diagnostics', 'cpa-manager', 'settings'] as const;
 const PUBLIC_USAGE_TAB_OPTIONS = ['overview', 'events'] as const;
 type UsageTab = (typeof USAGE_TAB_OPTIONS)[number];
 type Translate = (key: string) => string;
@@ -80,6 +87,7 @@ type UsagePageMode = 'admin' | 'public';
 const USAGE_TAB_LABEL_KEYS: Record<UsageTab, string> = {
   overview: 'usage_stats.tab_overview',
   events: 'usage_stats.tab_events',
+  'api-keys': 'usage_stats.tab_api_keys',
   'auth-files': 'usage_stats.tab_auth_files',
   'proxy-pools': 'usage_stats.tab_proxy_pools',
   'ai-provider': 'usage_stats.tab_ai_provider',
@@ -87,12 +95,34 @@ const USAGE_TAB_LABEL_KEYS: Record<UsageTab, string> = {
   'cpa-manager': 'usage_stats.tab_cpa_manager',
   settings: 'usage_stats.tab_settings',
 };
+const USAGE_TAB_DESCRIPTION_KEYS: Record<UsageTab, string> = {
+  overview: 'usage_stats.tab_overview_description',
+  events: 'usage_stats.tab_events_description',
+  'api-keys': 'usage_stats.tab_api_keys_description',
+  'auth-files': 'usage_stats.tab_auth_files_description',
+  'proxy-pools': 'usage_stats.tab_proxy_pools_description',
+  'ai-provider': 'usage_stats.tab_ai_provider_description',
+  'config-diagnostics': 'usage_stats.tab_config_diagnostics_description',
+  'cpa-manager': 'usage_stats.tab_cpa_manager_description',
+  settings: 'usage_stats.tab_settings_description',
+};
+const USAGE_TAB_GROUPS: ReadonlyArray<{
+  key: 'monitoring' | 'resources' | 'operations';
+  labelKey: string;
+  tabs: readonly UsageTab[];
+}> = [
+  { key: 'monitoring', labelKey: 'usage_stats.nav_group_monitoring', tabs: ['overview', 'events'] },
+  { key: 'resources', labelKey: 'usage_stats.nav_group_resources', tabs: ['api-keys', 'auth-files', 'ai-provider', 'proxy-pools'] },
+  { key: 'operations', labelKey: 'usage_stats.nav_group_operations', tabs: ['cpa-manager', 'config-diagnostics'] },
+];
 const renderUsageTabIcon = (tab: UsageTab) => {
   switch (tab) {
     case 'overview':
       return <IconSidebarDashboard size={18} aria-hidden="true" />;
     case 'events':
       return <IconSidebarLogs size={18} aria-hidden="true" />;
+    case 'api-keys':
+      return <IconKey size={18} aria-hidden="true" />;
     case 'auth-files':
       return <IconSidebarOauth size={18} aria-hidden="true" />;
     case 'proxy-pools':
@@ -117,6 +147,7 @@ const OVERVIEW_AUTO_REFRESH_INTERVAL_MS = 10_000;
 const REQUEST_EVENTS_STREAM_REFRESH_DEBOUNCE_MS = 800;
 export const CUSTOM_DATE_RANGE_BOUNDS_REFRESH_INTERVAL_MS = 60_000;
 export const STATUS_ACTIVE_HEARTBEAT_INTERVAL_MS = 30_000;
+const MAX_BROWSER_INTERVAL_MS = 2_147_483_647;
 const CPA_MANAGEMENT_PAGE = 'management.html';
 const ABSOLUTE_HTTP_URL_PATTERN = /^https?:\/\//i;
 const EXPLICIT_URL_SCHEME_PATTERN = /^[a-z][a-z\d+.-]*:/i;
@@ -128,7 +159,7 @@ export const getCredentialSectionVisibility = (tab: UsageTab) => ({
   showAiProvider: tab === 'ai-provider',
 });
 
-export const shouldShowRangeControls = (tab: UsageTab) => tab !== 'settings' && tab !== 'cpa-manager' && tab !== 'config-diagnostics' && tab !== 'proxy-pools' && !getCredentialSectionVisibility(tab).enabled;
+export const shouldShowRangeControls = (tab: UsageTab) => tab !== 'settings' && tab !== 'cpa-manager' && tab !== 'api-keys' && tab !== 'config-diagnostics' && tab !== 'proxy-pools' && !getCredentialSectionVisibility(tab).enabled;
 
 export const shouldShowApiKeyFilter = (tab: UsageTab) => shouldShowRangeControls(tab);
 
@@ -394,6 +425,19 @@ type StatusActiveHeartbeatOptions = {
   intervalMs?: number;
 };
 
+type CpaUpdateCheckTimerTarget = {
+  setInterval: (handler: () => void, timeout: number) => number;
+  clearInterval: (handle: number) => void;
+};
+
+type CpaUpdateCheckOptions = {
+  enabled: boolean;
+  intervalNanoseconds: number;
+  checkForUpdate: () => void | Promise<void>;
+  documentRef?: StatusActiveHeartbeatDocument;
+  timerTarget?: CpaUpdateCheckTimerTarget;
+};
+
 type VersionInfoLoader = (signal: AbortSignal) => Promise<VersionResponse>;
 
 type UsagePageVersionInfoOptions = {
@@ -619,6 +663,69 @@ export const scheduleStatusActiveHeartbeat = ({
   };
 };
 
+export const cpaUpdateCheckIntervalMs = (intervalNanoseconds: number): number => {
+  if (!Number.isFinite(intervalNanoseconds) || intervalNanoseconds <= 0) return 0;
+  return Math.min(MAX_BROWSER_INTERVAL_MS, Math.max(1, Math.floor(intervalNanoseconds / 1_000_000)));
+};
+
+export const scheduleCpaUpdateChecks = ({
+  enabled,
+  intervalNanoseconds,
+  checkForUpdate,
+  documentRef,
+  timerTarget,
+}: CpaUpdateCheckOptions) => {
+  const intervalMs = cpaUpdateCheckIntervalMs(intervalNanoseconds);
+  if (!enabled || intervalMs === 0) return () => undefined;
+
+  const targetDocument = documentRef ?? (typeof document === 'undefined' ? undefined : document);
+  const timers = timerTarget ?? (typeof window === 'undefined' ? undefined : {
+    setInterval: window.setInterval.bind(window),
+    clearInterval: window.clearInterval.bind(window),
+  });
+  if (!timers) return () => undefined;
+
+  let timer: number | null = null;
+  let checking = false;
+  const stopTimer = () => {
+    if (timer === null) return;
+    timers.clearInterval(timer);
+    timer = null;
+  };
+  const checkIfVisible = () => {
+    if (checking || !isUsagePageVisible(targetDocument)) return;
+    checking = true;
+    try {
+      Promise.resolve(checkForUpdate())
+        .catch(() => undefined)
+        .finally(() => {
+          checking = false;
+        });
+    } catch {
+      checking = false;
+    }
+  };
+  const startTimer = () => {
+    if (timer !== null || !isUsagePageVisible(targetDocument)) return;
+    timer = timers.setInterval(checkIfVisible, intervalMs);
+  };
+  const handleVisibilityChange = () => {
+    if (!isUsagePageVisible(targetDocument)) {
+      stopTimer();
+      return;
+    }
+    checkIfVisible();
+    startTimer();
+  };
+
+  startTimer();
+  targetDocument?.addEventListener('visibilitychange', handleVisibilityChange);
+  return () => {
+    stopTimer();
+    targetDocument?.removeEventListener('visibilitychange', handleVisibilityChange);
+  };
+};
+
 export const sanitizeRequestEventFilters = (
   filters: RequestEventFilterState,
   options: RequestEventFilterOptionsState,
@@ -802,6 +909,14 @@ export const normalizeUsageTabValue = (value: unknown): UsageTab | null => {
   return isUsageTab(value) ? value : null;
 };
 
+export const getUsageTabFromSearch = (search: string): UsageTab | null => {
+  try {
+    return normalizeUsageTabValue(new URLSearchParams(search).get('tab'));
+  } catch {
+    return null;
+  }
+};
+
 export const getUsageTabOptions = (translate: Translate): Array<{ value: UsageTab; label: string }> =>
   USAGE_TAB_OPTIONS.map((value) => ({
     value,
@@ -824,6 +939,12 @@ export const getTimeRangeOptions = (translate: Translate) =>
 
 const loadUsageTab = (): UsageTab => {
   try {
+    if (typeof window !== 'undefined') {
+      const tabFromURL = getUsageTabFromSearch(window.location.search);
+      if (tabFromURL) {
+        return tabFromURL;
+      }
+    }
     if (typeof localStorage === 'undefined') {
       return DEFAULT_USAGE_TAB;
     }
@@ -871,6 +992,11 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
   const isDark = resolvedTheme === 'dark';
   const [activeTab, setActiveTab] = useState<UsageTab>(loadUsageTab);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [isPreferencesMenuOpen, setIsPreferencesMenuOpen] = useState(false);
+  const mobileNavButtonRef = useRef<HTMLButtonElement | null>(null);
+  const preferencesButtonRef = useRef<HTMLButtonElement | null>(null);
+  const preferencesMenuRef = useRef<HTMLDivElement | null>(null);
   const [timeRange, setTimeRange] = useState<UsageTimeRange>(loadTimeRange);
   const [realtimeWindow] = useState<OverviewRealtimeWindow>(loadRealtimeWindow);
   const [customTimeRange, setCustomTimeRange] = useState<{ start: string; end: string }>(loadCustomTimeRange);
@@ -945,6 +1071,8 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
   const [cpaRuntimeLoading, setCpaRuntimeLoading] = useState(false);
   const [cpaActionLoading, setCpaActionLoading] = useState('');
   const [cpaRuntimeError, setCpaRuntimeError] = useState('');
+  const [cpaUpdateDialogOpen, setCpaUpdateDialogOpen] = useState(false);
+  const notifiedCpaVersionRef = useRef('');
   const [configDiagnosticsRefreshKey, setConfigDiagnosticsRefreshKey] = useState(0);
   const [topNotice, setTopNotice] = useState<{ kind: TopNoticeKind; message: string } | null>(null);
   const [hasNewVersion, setHasNewVersion] = useState(false);
@@ -998,6 +1126,21 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
   const analysisRequestControllerRef = useRef<AbortController | null>(null);
 
   const tabOptions = useMemo(() => getVisibleUsageTabOptions(t, mode), [mode, t]);
+  const navigationGroups = useMemo(() => USAGE_TAB_GROUPS
+    .map((group) => ({
+      ...group,
+      label: t(group.labelKey),
+      options: group.tabs
+        .map((tab) => tabOptions.find((option) => option.value === tab))
+        .filter((option): option is { value: UsageTab; label: string } => Boolean(option)),
+    }))
+    .filter((group) => group.options.length > 0), [t, tabOptions]);
+  const settingsTabOption = useMemo(
+    () => tabOptions.find((option) => option.value === 'settings') ?? null,
+    [tabOptions],
+  );
+  const activeTabTitle = t(USAGE_TAB_LABEL_KEYS[activeTab]);
+  const activeTabDescription = t(USAGE_TAB_DESCRIPTION_KEYS[activeTab]);
   const timeRangeOptions = useMemo(() => getTimeRangeOptions(t), [t]);
   const apiKeySelectOptions = useMemo(
     () => [
@@ -1028,6 +1171,16 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
     return styles.updateCheckToastInfo;
   })() : '';
   const cpaManagementURL = useMemo(() => getBackToCPALinkURL(status), [status]);
+  const navigateToUsageTab = useCallback((nextTab: UsageTab) => {
+    setIsMobileNavOpen(false);
+    setIsPreferencesMenuOpen(false);
+    if (nextTab === activeTab) return;
+    setActiveTab(nextTab);
+    if (typeof window === 'undefined') return;
+    const nextURL = new URL(window.location.href);
+    nextURL.searchParams.set('tab', nextTab);
+    window.history.pushState({ ...window.history.state, usageTab: nextTab }, '', nextURL);
+  }, [activeTab]);
   const { customRangeError, customRangeHint } = useMemo(() => {
     if (timeRange !== 'custom') {
       return { customRangeError: '', customRangeHint: '' };
@@ -1092,7 +1245,7 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
       }
       if (error instanceof ApiError && error.status === 401) {
         onAuthRequired?.();
-        return;
+        throw error;
       }
       setApiKeySettingsError(formatUserActionableError(error, t('usage_stats.api_key_settings_load_failed')));
     } finally {
@@ -1125,7 +1278,7 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
       }
       if (error instanceof ApiError && error.status === 401) {
         onAuthRequired?.();
-        return;
+        throw error;
       }
       setAuthSessionsError(formatUserActionableError(error, t('usage_stats.session_settings_load_failed')));
     } finally {
@@ -1147,7 +1300,7 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         onAuthRequired?.();
-        return;
+        throw error;
       }
       setApiKeySettingsError(formatUserActionableError(error, t('usage_stats.cpa_api_key_create_failed')));
       showTopNotice('error', t('usage_stats.cpa_api_key_create_failed'));
@@ -1168,10 +1321,11 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         onAuthRequired?.();
-        return;
+        throw error;
       }
       setApiKeySettingsError(formatUserActionableError(error, t('usage_stats.cpa_api_key_save_failed')));
       showTopNotice('error', t('usage_stats.cpa_api_key_save_failed'));
+      throw error;
     } finally {
       setApiKeySettingsSavingId(null);
     }
@@ -1188,10 +1342,11 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         onAuthRequired?.();
-        return;
+        throw error;
       }
       setApiKeySettingsError(formatUserActionableError(error, t('usage_stats.cpa_api_key_delete_failed')));
       showTopNotice('error', t('usage_stats.cpa_api_key_delete_failed'));
+      throw error;
     } finally {
       setApiKeySettingsDeletingId(null);
     }
@@ -1331,6 +1486,62 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
       // Ignore storage errors.
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const syncTabFromHistory = () => {
+      const nextTab = getUsageTabFromSearch(window.location.search) ?? DEFAULT_USAGE_TAB;
+      const visibleTab = isPublicMode && !PUBLIC_USAGE_TAB_OPTIONS.includes(nextTab as typeof PUBLIC_USAGE_TAB_OPTIONS[number])
+        ? DEFAULT_USAGE_TAB
+        : nextTab;
+      setActiveTab(visibleTab);
+      setIsMobileNavOpen(false);
+      setIsPreferencesMenuOpen(false);
+    };
+    window.addEventListener('popstate', syncTabFromHistory);
+    return () => window.removeEventListener('popstate', syncTabFromHistory);
+  }, [isPublicMode]);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setIsMobileNavOpen(false);
+    }
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (!isMobileNavOpen || typeof document === 'undefined') return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setIsMobileNavOpen(false);
+      mobileNavButtonRef.current?.focus();
+    };
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isMobileNavOpen]);
+
+  useEffect(() => {
+    if (!isPreferencesMenuOpen || typeof document === 'undefined') return undefined;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (preferencesMenuRef.current?.contains(event.target as Node)) return;
+      setIsPreferencesMenuOpen(false);
+    };
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setIsPreferencesMenuOpen(false);
+      preferencesButtonRef.current?.focus();
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isPreferencesMenuOpen]);
 
   useEffect(() => {
     saveRequestEventsPreferences({
@@ -1655,6 +1866,35 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
     }
   }, [eventsModelFilter, eventsResultFilter, eventsSourceFilter, getEventQueryWindow, onAuthRequired, selectedApiKeyId, showTopNotice, t, timeRange]);
 
+  const loadCpaRuntime = useCallback(async () => {
+    setCpaRuntimeLoading(true);
+    setCpaRuntimeError('');
+    try {
+      const [runtime, events] = await Promise.all([
+        fetchCpaRuntime(),
+        fetchCpaUpdateEvents(),
+      ]);
+      setCpaRuntime(runtime);
+      setCpaEvents(events);
+      if (runtime.updateAvailable) {
+        setHasNewVersion(true);
+        const latestVersion = runtime.latestVersion?.trim() ?? '';
+        if (!isPublicMode && latestVersion && notifiedCpaVersionRef.current !== latestVersion) {
+          notifiedCpaVersionRef.current = latestVersion;
+          setCpaUpdateDialogOpen(true);
+        }
+      }
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        if (!isPublicMode) onAuthRequired?.();
+        return;
+      }
+      setCpaRuntimeError(formatUserActionableError(error, t('usage_stats.cpa_load_failed')));
+    } finally {
+      setCpaRuntimeLoading(false);
+    }
+  }, [isPublicMode, onAuthRequired, t]);
+
   const refreshActiveTab = useCallback(async () => {
     if (activeTab === 'events') {
       await Promise.all([loadEventFilterOptions(), loadEvents()]);
@@ -1672,8 +1912,12 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
       await Promise.all([loadAuthSessions(), loadPricing()]);
       return;
     }
-    if (activeTab === 'cpa-manager') {
+    if (activeTab === 'api-keys') {
       await loadApiKeySettings();
+      return;
+    }
+    if (activeTab === 'cpa-manager') {
+      await loadCpaRuntime();
       return;
     }
     if (activeTab === 'config-diagnostics') {
@@ -1681,7 +1925,7 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
       return;
     }
     await Promise.all([loadUsage(), loadRealtime()]);
-  }, [activeTab, credentialsDataEnabled, loadAnalysis, loadApiKeySettings, loadAuthSessions, loadEventFilterOptions, loadEvents, loadPricing, loadRealtime, loadUsage, refreshCredentials]);
+  }, [activeTab, credentialsDataEnabled, loadAnalysis, loadApiKeySettings, loadAuthSessions, loadCpaRuntime, loadEventFilterOptions, loadEvents, loadPricing, loadRealtime, loadUsage, refreshCredentials]);
 
   const refreshAutoRefreshTab = useCallback(async () => {
     if (activeTab === 'overview') {
@@ -1770,31 +2014,6 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
     }
   }, [onAuthRequired, showTopNotice, t]);
 
-  const loadCpaRuntime = useCallback(async () => {
-    setCpaRuntimeLoading(true);
-    setCpaRuntimeError('');
-    try {
-      const [runtime, events] = await Promise.all([
-        fetchCpaRuntime(),
-        fetchCpaUpdateEvents(),
-      ]);
-      setCpaRuntime(runtime);
-      setCpaEvents(events);
-      if (runtime.updateAvailable) {
-        setHasNewVersion(true);
-        showTopNotice('success', t('usage_stats.cpa_update_available', { version: runtime.latestVersion }));
-      }
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
-        if (!isPublicMode) onAuthRequired?.();
-        return;
-      }
-      setCpaRuntimeError(formatUserActionableError(error, t('usage_stats.cpa_load_failed')));
-    } finally {
-      setCpaRuntimeLoading(false);
-    }
-  }, [isPublicMode, onAuthRequired, showTopNotice, t]);
-
   const runCpaAction = useCallback(async (
     action: 'start' | 'stop' | 'restart' | 'update',
     runner: () => Promise<CpaRuntimeStatusResponse>,
@@ -1805,6 +2024,9 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
       const runtime = await runner();
       setCpaRuntime(runtime);
       setCpaEvents(await fetchCpaUpdateEvents());
+      if (action === 'update') {
+        setCpaUpdateDialogOpen(false);
+      }
       showTopNotice('success', t(`usage_stats.cpa_${action}_success`));
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
@@ -1917,7 +2139,7 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
   }, [activeTab, loadAnalysis]);
 
   useEffect(() => {
-    const shouldLoadApiKeys = activeTab === 'cpa-manager';
+    const shouldLoadApiKeys = activeTab === 'api-keys';
     const shouldLoadAuthSessions = activeTab === 'settings';
     if (!shouldLoadApiKeys) {
       apiKeySettingsRequestControllerRef.current?.abort();
@@ -1972,6 +2194,12 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
     });
   }, [activeTab, cpaRuntime, loadCpaRuntime]);
 
+  useEffect(() => scheduleCpaUpdateChecks({
+    enabled: !isPublicMode && cpaRuntime?.enabled === true,
+    intervalNanoseconds: cpaRuntime?.updateCheckInterval ?? 0,
+    checkForUpdate: loadCpaRuntime,
+  }), [cpaRuntime?.enabled, cpaRuntime?.updateCheckInterval, isPublicMode, loadCpaRuntime]);
+
   useEffect(() => {
     return scheduleEffectTask(() => {
       const next = sanitizeRequestEventFilters(
@@ -2020,59 +2248,94 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
   const dailyAveragePanelUsage = getDailyAveragePanelUsage(currentOverviewUsage, usage, reserveDailyAveragePanel, loading);
 
   const manualRefreshControl = (
-    <div className={styles.refreshSwitcher} role="group" aria-label={t('usage_stats.refresh')}>
-      <button
-        type="button"
-        className={`${styles.refreshPill} ${styles.refreshPillActive} ${manualRefreshLoading ? styles.refreshPillLoading : ''}`.trim()}
-        onClick={() => void handleManualRefresh().catch(() => {})}
-        disabled={manualRefreshLoading}
-        aria-busy={manualRefreshLoading}
-      >
-        {manualRefreshLoading ? (
-          <span className={styles.refreshPillInner}>
-            <LoadingSpinner size={12} className={styles.refreshSpinner} />
-            <span>{t('common.loading')}</span>
-          </span>
-        ) : (
-          <span className={styles.refreshPillInner}>
-            <IconRefreshCw size={14} />
-            <span>{t('usage_stats.refresh')}</span>
-          </span>
-        )}
-      </button>
-    </div>
+    <button
+      type="button"
+      className={`${styles.topBarActionButton} ${manualRefreshLoading ? styles.topBarActionButtonLoading : ''}`.trim()}
+      onClick={() => void handleManualRefresh().catch(() => {})}
+      disabled={manualRefreshLoading}
+      aria-busy={manualRefreshLoading}
+      aria-label={`${t('usage_stats.refresh')}：${activeTabTitle}`}
+      title={`${t('usage_stats.refresh')}：${activeTabTitle}`}
+    >
+      {manualRefreshLoading
+        ? <LoadingSpinner size={15} className={styles.refreshSpinner} />
+        : <IconRefreshCw size={16} aria-hidden="true" />}
+      <span>{manualRefreshLoading ? t('common.loading') : t('usage_stats.refresh')}</span>
+    </button>
   );
 
   return (
     <div className={styles.pageShell}>
       <div className={styles.pageFrame}>
-        <aside className={`${styles.sidebarNav} ${isSidebarCollapsed ? styles.sidebarNavCollapsed : ''}`.trim()}>
+        <button
+          type="button"
+          className={`${styles.mobileNavBackdrop} ${isMobileNavOpen ? styles.mobileNavBackdropVisible : ''}`.trim()}
+          onClick={() => setIsMobileNavOpen(false)}
+          aria-label={t('usage_stats.navigation_close')}
+          aria-hidden={!isMobileNavOpen}
+          tabIndex={isMobileNavOpen ? 0 : -1}
+        />
+        <aside
+          id="usage-navigation"
+          className={`${styles.sidebarNav} ${isSidebarCollapsed ? styles.sidebarNavCollapsed : ''} ${isMobileNavOpen ? styles.sidebarNavMobileOpen : ''}`.trim()}
+          aria-label={t('usage_stats.tabs_aria_label')}
+          aria-hidden={isMobile ? !isMobileNavOpen : undefined}
+        >
           <div className={styles.sidebarBrand}>
             <span className={styles.sidebarLogo} aria-hidden="true">C</span>
             <BrandLink className={styles.sidebarBrandLink} />
+            <button
+              type="button"
+              className={styles.sidebarMobileClose}
+              onClick={() => setIsMobileNavOpen(false)}
+              aria-label={t('usage_stats.navigation_close')}
+            >
+              <IconX size={18} aria-hidden="true" />
+            </button>
           </div>
-          <nav className={styles.sidebarTabBar} role="tablist" aria-label={t('usage_stats.tabs_aria_label')}>
-            {tabOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === option.value}
-                className={`${styles.tabPill} ${activeTab === option.value ? styles.tabPillActive : ''}`.trim()}
-                onClick={() => setActiveTab(option.value)}
-                title={option.label}
-              >
-                <span className={styles.tabPillIcon}>{renderUsageTabIcon(option.value)}</span>
-                <span className={styles.tabPillLabel}>{option.label}</span>
-              </button>
+          <nav className={styles.sidebarTabBar} aria-label={t('usage_stats.tabs_aria_label')}>
+            {navigationGroups.map((group) => (
+              <div className={styles.sidebarNavGroup} key={group.key}>
+                <span className={styles.sidebarNavGroupLabel}>{group.label}</span>
+                <div className={styles.sidebarNavGroupItems}>
+                  {group.options.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-current={activeTab === option.value ? 'page' : undefined}
+                      className={`${styles.tabPill} ${activeTab === option.value ? styles.tabPillActive : ''}`.trim()}
+                      onClick={() => navigateToUsageTab(option.value)}
+                      title={option.label}
+                    >
+                      <span className={styles.tabPillIcon}>{renderUsageTabIcon(option.value)}</span>
+                      <span className={styles.tabPillLabel}>{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </nav>
           <div className={styles.sidebarFooter}>
-            <div className={`${styles.sidebarStatusCard} ${statusError ? styles.sidebarStatusCardError : ''}`.trim()}>
+            {settingsTabOption && (
+              <button
+                type="button"
+                aria-current={activeTab === settingsTabOption.value ? 'page' : undefined}
+                className={`${styles.tabPill} ${styles.sidebarSettingsButton} ${activeTab === settingsTabOption.value ? styles.tabPillActive : ''}`.trim()}
+                onClick={() => navigateToUsageTab(settingsTabOption.value)}
+                title={settingsTabOption.label}
+              >
+                <span className={styles.tabPillIcon}>{renderUsageTabIcon(settingsTabOption.value)}</span>
+                <span className={styles.tabPillLabel}>{settingsTabOption.label}</span>
+              </button>
+            )}
+            <div
+              className={`${styles.sidebarStatusCard} ${statusError ? styles.sidebarStatusCardError : ''}`.trim()}
+              title={statusError || undefined}
+            >
               <span className={styles.sidebarStatusDot} aria-hidden="true" />
               <span className={styles.sidebarStatusText}>
-                <strong>{statusError ? '系统异常' : '系统正常'}</strong>
-                <span>{statusError || '所有服务运行良好'}</span>
+                <strong>{t(statusError ? 'usage_stats.system_attention' : 'usage_stats.system_normal')}</strong>
+                <span>{t(statusError ? 'usage_stats.system_attention_detail' : 'usage_stats.system_normal_detail')}</span>
               </span>
             </div>
             <button
@@ -2090,115 +2353,128 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
 
         <div className={styles.pageContentFrame}>
           <header className={styles.topBar}>
-            <div className={styles.topBarMeta}>
-              <span className={styles.liveBadge}>
-                <span aria-hidden="true" />
-                Live
-              </span>
-              {lastSyncAt && (
-                <span className={styles.topBarUpdated}>
-                  {t('usage_stats.last_updated')}: {lastSyncAt.toLocaleTimeString()}
+            <div className={styles.topBarHeading}>
+              <button
+                ref={mobileNavButtonRef}
+                type="button"
+                className={styles.mobileNavButton}
+                onClick={() => {
+                  setIsPreferencesMenuOpen(false);
+                  setIsMobileNavOpen((current) => !current);
+                }}
+                aria-label={t(isMobileNavOpen ? 'usage_stats.navigation_close' : 'usage_stats.navigation_open')}
+                aria-controls="usage-navigation"
+                aria-expanded={isMobileNavOpen}
+              >
+                <IconMenu size={19} aria-hidden="true" />
+              </button>
+              <span className={styles.topBarPageIcon} aria-hidden="true">{renderUsageTabIcon(activeTab)}</span>
+              <div className={styles.topBarTitleBlock}>
+                <h1 className={styles.topBarTitle}>{activeTabTitle}</h1>
+                <p className={styles.topBarDescription}>{activeTabDescription}</p>
+              </div>
+              <div className={`${styles.topBarFreshness} ${statusError ? styles.topBarFreshnessError : ''}`.trim()}>
+                <span className={styles.topBarFreshnessDot} aria-hidden="true" />
+                <span>
+                  {lastSyncAt
+                    ? `${t('usage_stats.last_updated')} ${lastSyncAt.toLocaleTimeString()}`
+                    : t(statusError ? 'usage_stats.system_attention' : 'usage_stats.system_normal')}
                 </span>
-              )}
+              </div>
             </div>
             <div className={styles.topBarActions}>
-            {isPublicMode && (
-              <div className={styles.publicAccessBadge}>
-                <span>{t('usage_stats.public_readonly_badge')}</span>
-                <button type="button" onClick={onLoginClick}>{t('usage_stats.admin_login')}</button>
-              </div>
-            )}
-            {cpaManagementURL && (
-              <div className={styles.backToCpaSwitcher} role="group" aria-label={t('usage_stats.back_to_cpa_aria')}>
-                <a
-                  className={styles.backToCpaLink}
-                  href={cpaManagementURL}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={t('usage_stats.back_to_cpa_aria')}
-                >
-                  <span className={styles.backToCpaIcon} aria-hidden="true">
-                    <svg viewBox="0 0 16 16" focusable="false">
-                      <path d="M6 4h6v6" />
-                      <path d="M12 4 5 11" />
-                    </svg>
-                  </span>
-                  <span>{t('usage_stats.back_to_cpa')}</span>
-                </a>
-              </div>
-            )}
-            <div className={styles.refreshSwitcher} role="group" aria-label={t('usage_stats.refresh')}>
-              <button
-                type="button"
-                className={`${styles.refreshPill} ${styles.refreshPillActive} ${manualRefreshLoading ? styles.refreshPillLoading : ''}`.trim()}
-                onClick={() => void handleManualRefresh().catch(() => {})}
-                disabled={manualRefreshLoading}
-                aria-busy={manualRefreshLoading}
-              >
-                {manualRefreshLoading ? (
-                  <span className={styles.refreshPillInner}>
-                    <LoadingSpinner size={12} className={styles.refreshSpinner} />
-                    <span>{t('common.loading')}</span>
-                  </span>
-                ) : (
-                  <span className={styles.refreshPillInner}>
-                    <IconRefreshCw size={14} />
-                    <span>{t('usage_stats.refresh')}</span>
-                  </span>
-                )}
-              </button>
-            </div>
-            <div className={styles.themeSwitcher} role="tablist" aria-label={t('usage_stats.theme_switch')}>
-              {themeOptions.map((option) => {
-                const active = theme === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    className={`${styles.themePill} ${active ? styles.themePillActive : ''}`.trim()}
-                    onClick={() => setTheme(option.value)}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-            {!isPublicMode && shouldShowUpdateCheckButton(versionInfo) && (
-              <div className={styles.updateCheckSwitcher} role="group" aria-label={t('usage_stats.check_updates')}>
+              {isPublicMode && (
+                <div className={styles.publicAccessBadge}>
+                  <span>{t('usage_stats.public_readonly_badge')}</span>
+                  <button type="button" onClick={onLoginClick}>{t('usage_stats.admin_login')}</button>
+                </div>
+              )}
+              {manualRefreshControl}
+              <div className={styles.preferencesMenu} ref={preferencesMenuRef}>
                 <button
+                  ref={preferencesButtonRef}
                   type="button"
-                  className={`${styles.updateCheckPill} ${styles.updateCheckPillActive} ${updateCheckLoading ? styles.updateCheckPillLoading : ''}`.trim()}
-                  onClick={() => void handleUpdateCheck()}
-                  disabled={updateCheckLoading}
-                  aria-busy={updateCheckLoading}
-                  aria-pressed={hasNewVersion}
+                  className={`${styles.topBarIconButton} ${hasNewVersion ? styles.topBarIconButtonAttention : ''}`.trim()}
+                  onClick={() => {
+                    setIsMobileNavOpen(false);
+                    setIsPreferencesMenuOpen((current) => !current);
+                  }}
+                  aria-label={t('usage_stats.preferences_menu')}
+                  aria-expanded={isPreferencesMenuOpen}
+                  aria-haspopup="dialog"
+                  title={t('usage_stats.preferences_menu')}
                 >
-                  {updateCheckLoading ? (
-                    <span className={styles.updateCheckPillInner}>
-                      <LoadingSpinner size={12} className={styles.updateCheckSpinner} />
-                      <span>{t('common.loading')}</span>
-                    </span>
-                  ) : (
-                    <span className={styles.updateCheckPillInner}>
-                      <span>{t('usage_stats.check_updates')}</span>
-                      {hasNewVersion && <span className={styles.updateCheckDot} aria-hidden="true" />}
-                    </span>
-                  )}
+                  <IconMoreHorizontal size={19} aria-hidden="true" />
+                  {hasNewVersion && <span className={styles.topBarAttentionDot} aria-hidden="true" />}
                 </button>
+                {isPreferencesMenuOpen && (
+                  <div className={styles.preferencesDropdown} role="dialog" aria-label={t('usage_stats.preferences_menu')}>
+                    <div className={styles.preferencesDropdownHeader}>{t('usage_stats.preferences_menu')}</div>
+                    <div className={styles.preferencesSection}>
+                      <span className={styles.preferencesSectionLabel}>{t('usage_stats.appearance')}</span>
+                      <div className={styles.preferencesThemeOptions} role="radiogroup" aria-label={t('usage_stats.theme_switch')}>
+                        {themeOptions.map((option) => {
+                          const active = theme === option.value;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              role="radio"
+                              aria-checked={active}
+                              className={`${styles.preferencesThemeOption} ${active ? styles.preferencesThemeOptionActive : ''}`.trim()}
+                              onClick={() => setTheme(option.value)}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div className={styles.preferencesDivider} />
+                    {cpaManagementURL && (
+                      <a
+                        className={styles.preferencesMenuItem}
+                        href={cpaManagementURL}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => setIsPreferencesMenuOpen(false)}
+                      >
+                        <IconExternalLink size={16} aria-hidden="true" />
+                        <span>{t('usage_stats.back_to_cpa')}</span>
+                      </a>
+                    )}
+                    {!isPublicMode && shouldShowUpdateCheckButton(versionInfo) && (
+                      <button
+                        type="button"
+                        className={styles.preferencesMenuItem}
+                        onClick={() => {
+                          setIsPreferencesMenuOpen(false);
+                          void handleUpdateCheck();
+                        }}
+                        disabled={updateCheckLoading}
+                      >
+                        {updateCheckLoading
+                          ? <LoadingSpinner size={15} className={styles.updateCheckSpinner} />
+                          : <IconRefreshCw size={16} aria-hidden="true" />}
+                        <span>{updateCheckLoading ? t('common.loading') : t('usage_stats.check_updates')}</span>
+                        {hasNewVersion && <span className={styles.preferencesItemStatusDot} aria-hidden="true" />}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className={`${styles.preferencesMenuItem} ${styles.preferencesMenuItemDanger}`.trim()}
+                      onClick={() => {
+                        setIsPreferencesMenuOpen(false);
+                        handleRequestLogout();
+                      }}
+                      disabled={loggingOut}
+                    >
+                      <IconLogOut size={16} aria-hidden="true" />
+                      <span>{loggingOut ? t('common.loading') : t('common.logout')}</span>
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-            <div className={styles.signOutSwitcher} role="group" aria-label={t('common.logout')}>
-              <button
-                type="button"
-                className={`${styles.signOutPill} ${styles.signOutPillActive}`.trim()}
-                onClick={handleRequestLogout}
-                disabled={loggingOut}
-              >
-                <span className={styles.signOutPillInner}>{loggingOut ? t('common.loading') : t('common.logout')}</span>
-              </button>
-            </div>
             </div>
           </header>
 
@@ -2210,40 +2486,6 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
                   <LoadingSpinner size={28} className={styles.loadingOverlaySpinner} />
                   <span className={styles.loadingOverlayText}>{t('common.loading')}</span>
                 </div>
-              </div>
-            )}
-
-            {(cpaManagementURL || lastSyncAt || !showRangeControls) && (
-              <div className={styles.toolbarMetaRow}>
-                {lastSyncAt && (
-                  <span className={styles.lastRefreshed}>
-                    {t('usage_stats.last_updated')}: {lastSyncAt.toLocaleTimeString()}
-                  </span>
-                )}
-                {cpaManagementURL && (
-                  <div className={styles.toolbarMetaRight}>
-                    <a
-                      className={styles.backToCpaLink}
-                      href={cpaManagementURL}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label={t('usage_stats.back_to_cpa_aria')}
-                    >
-                      <span>{t('usage_stats.back_to_cpa')}</span>
-                      <span className={styles.backToCpaIcon} aria-hidden="true">
-                        <svg viewBox="0 0 16 16" focusable="false">
-                          <path d="M6 4h6v6" />
-                          <path d="M12 4 5 11" />
-                        </svg>
-                      </span>
-                    </a>
-                  </div>
-                )}
-                {!showRangeControls && (
-                  <div className={styles.usageRefreshSlot}>
-                    {manualRefreshControl}
-                  </div>
-                )}
               </div>
             )}
 
@@ -2383,9 +2625,6 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
                       <span className={styles.customRangeError}>{customRangeError}</span>
                     )}
                   </div>
-                  <div className={styles.usageRefreshSlot}>
-                    {manualRefreshControl}
-                  </div>
                 </div>
               </div>
             )}
@@ -2393,8 +2632,8 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
             {activeTab === 'overview' && error && <div className={styles.errorBox}>{error === 'AUTH_REQUIRED' ? t('auth.session_expired') : error}</div>}
             {activeTab === 'settings' && pricingError && <div className={styles.errorBox}>{pricingError === 'AUTH_REQUIRED' ? t('auth.session_expired') : pricingError}</div>}
             {activeTab === 'settings' && authSessionsError && <div className={styles.errorBox}>{authSessionsError}</div>}
-            {activeTab === 'cpa-manager' && apiKeySettingsError && <div className={styles.errorBox}>{apiKeySettingsError}</div>}
-            {!(activeTab === 'overview' ? error : activeTab === 'settings' ? (pricingError || authSessionsError) : activeTab === 'cpa-manager' ? apiKeySettingsError : '') && displayStatusError && <div className={styles.errorBox}>{displayStatusError}</div>}
+            {activeTab === 'api-keys' && apiKeySettingsError && <div className={styles.errorBox}>{apiKeySettingsError}</div>}
+            {!(activeTab === 'overview' ? error : activeTab === 'settings' ? (pricingError || authSessionsError) : activeTab === 'api-keys' ? apiKeySettingsError : '') && displayStatusError && <div className={styles.errorBox}>{displayStatusError}</div>}
 
             {activeTab === 'overview' && (
               <UsageOverviewTab
@@ -2463,6 +2702,20 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
               />
             )}
 
+            {activeTab === 'api-keys' && (
+              <UsageApiKeysTab
+                apiKeySettings={apiKeySettings}
+                apiKeySettingsLoading={apiKeySettingsLoading}
+                apiKeySettingsCreating={apiKeySettingsCreating}
+                apiKeySettingsSavingId={apiKeySettingsSavingId}
+                apiKeySettingsDeletingId={apiKeySettingsDeletingId}
+                handleCreateApiKey={handleCreateApiKey}
+                handleSaveApiKey={handleSaveApiKey}
+                handleDeleteApiKey={handleDeleteApiKey}
+                showTopNotice={showTopNotice}
+              />
+            )}
+
             {activeTab === 'cpa-manager' && (
               <UsageCpaManagerTab
                 cpaRuntimeError={cpaRuntimeError}
@@ -2475,16 +2728,8 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
                 restartCpaRuntime={restartCpaRuntime}
                 stopCpaRuntime={stopCpaRuntime}
                 updateCpaRuntime={updateCpaRuntime}
+                onShowUpdateDetails={() => setCpaUpdateDialogOpen(true)}
                 cpaManagementURL={cpaManagementURL}
-                apiKeySettings={apiKeySettings}
-                apiKeySettingsLoading={apiKeySettingsLoading}
-                apiKeySettingsCreating={apiKeySettingsCreating}
-                apiKeySettingsSavingId={apiKeySettingsSavingId}
-                apiKeySettingsDeletingId={apiKeySettingsDeletingId}
-                handleCreateApiKey={handleCreateApiKey}
-                handleSaveApiKey={handleSaveApiKey}
-                handleDeleteApiKey={handleDeleteApiKey}
-                showTopNotice={showTopNotice}
                 cpaEvents={cpaEvents}
               />
             )}
@@ -2508,6 +2753,51 @@ export function UsagePage({ onAuthRequired, mode = 'admin', onLoginClick }: { on
           </main>
         </div>
       </div>
+      <Modal
+        open={cpaUpdateDialogOpen && cpaRuntime?.updateAvailable === true}
+        title={t('usage_stats.cpa_update_dialog_title')}
+        onClose={() => setCpaUpdateDialogOpen(false)}
+        closeDisabled={cpaActionLoading === 'update'}
+        width={720}
+        footer={
+          <>
+            <Button type="button" variant="secondary" onClick={() => setCpaUpdateDialogOpen(false)} disabled={cpaActionLoading === 'update'}>
+              {t('usage_stats.cpa_update_later')}
+            </Button>
+            {cpaRuntime?.releaseURL && (
+              <a className="btn btn-secondary" href={cpaRuntime.releaseURL} target="_blank" rel="noreferrer">
+                <span>{t('usage_stats.cpa_open_release_page')}</span>
+              </a>
+            )}
+            <Button
+              type="button"
+              variant="primary"
+              onClick={() => void runCpaAction('update', updateCpaRuntime)}
+              loading={cpaActionLoading === 'update'}
+              disabled={Boolean(cpaActionLoading)}
+            >
+              {t('usage_stats.cpa_update_now')}
+            </Button>
+          </>
+        }
+      >
+        <div className={styles.cpaUpdateDialogBody}>
+          <div className={styles.cpaUpdateVersionRow}>
+            <div>
+              <span>{t('usage_stats.cpa_current_version')}</span>
+              <strong>{cpaRuntime?.currentVersion || '-'}</strong>
+            </div>
+            <div>
+              <span>{t('usage_stats.cpa_latest_version')}</span>
+              <strong>{cpaRuntime?.latestVersion || '-'}</strong>
+            </div>
+          </div>
+          <div className={styles.cpaReleaseNotesSection}>
+            <h3>{t('usage_stats.cpa_release_notes')}</h3>
+            <pre>{cpaRuntime?.releaseNotes || t('usage_stats.cpa_release_notes_empty')}</pre>
+          </div>
+        </div>
+      </Modal>
       <Modal
         open={logoutConfirmOpen}
         title={t('usage_stats.logout_confirm_title')}

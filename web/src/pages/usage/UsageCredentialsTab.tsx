@@ -60,6 +60,7 @@ export function UsageCredentialsTab({
             proxyPoolsLoading={credentialsData.proxyPoolsLoading}
             proxyPoolsError={credentialsData.proxyPoolsError}
             proxyPoolFilterId={credentialsData.authFileProxyPoolFilterId}
+            providerFilter={activeCredentialProviderFilter}
             onPageChange={credentialsData.setAuthFilePage}
             onPageSizeChange={credentialsData.setAuthFilePageSize}
             onActiveOnlyChange={credentialsData.setAuthFileActiveOnly}

@@ -163,12 +163,16 @@ func (m *Manager) Status(ctx context.Context) RuntimeStatus {
 	}
 	currentVersion := m.CurrentVersion(ctx)
 	latestVersion := ""
+	releaseNotes := ""
+	releaseURL := ""
 	updateAvailable := false
 	canCompare := false
 	message := ""
 	if m.cfg.Enabled {
 		if release, err := m.release.Latest(ctx); err == nil {
 			latestVersion = release.Version
+			releaseNotes = release.Notes
+			releaseURL = release.URL
 			if currentVersion != "" {
 				if comparison, ok := CompareVersions(currentVersion, latestVersion); ok {
 					canCompare = true
@@ -197,6 +201,8 @@ func (m *Manager) Status(ctx context.Context) RuntimeStatus {
 		ConfigPath:          m.cfg.ConfigPath,
 		CurrentVersion:      currentVersion,
 		LatestVersion:       latestVersion,
+		ReleaseNotes:        releaseNotes,
+		ReleaseURL:          releaseURL,
 		UpdateAvailable:     updateAvailable,
 		CanCompare:          canCompare,
 		Message:             message,

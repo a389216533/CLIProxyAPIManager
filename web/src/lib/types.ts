@@ -63,6 +63,8 @@ export interface CpaRuntimeStatusResponse {
   configPath: string
   currentVersion?: string
   latestVersion?: string
+  releaseNotes?: string
+  releaseURL?: string
   updateAvailable: boolean
   canCompare: boolean
   message?: string

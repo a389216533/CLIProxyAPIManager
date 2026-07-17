@@ -14,6 +14,7 @@ interface UseCredentialPagesOptions {
 }
 
 export const CREDENTIAL_PAGES_REFRESH_INTERVAL_MS = 60 * 1000
+export const AUTH_FILE_QUERY_DEBOUNCE_MS = 300
 
 const AUTH_FILE_ACTIVE_ONLY_STORAGE_KEY = 'CLIProxyAPIManager-auth-files-active-only'
 
@@ -86,15 +87,23 @@ export function useCredentialPages({ enabledAuthFiles, enabledAiProviders, authF
   const [authFileSort, setAuthFileSortState] = useState<UsageIdentityPageSort>('priority')
   const [aiProviderSort, setAiProviderSortState] = useState<UsageIdentityPageSort>('total_requests')
   const [authFileQuery, setAuthFileQueryState] = useState('')
+  const [debouncedAuthFileQuery, setDebouncedAuthFileQuery] = useState('')
   const [authFilesLoading, setAuthFilesLoading] = useState(false)
   const [aiProvidersLoading, setAiProvidersLoading] = useState(false)
   const authFilesRequestControllerRef = useRef<AbortController | null>(null)
   const aiProvidersRequestControllerRef = useRef<AbortController | null>(null)
 
   const setAuthFileQuery = useCallback((query: string) => {
-    setAuthFilePage(1)
     setAuthFileQueryState(query)
   }, [])
+
+  useEffect(() => {
+    const timeoutID = window.setTimeout(() => {
+      setAuthFilePage(1)
+      setDebouncedAuthFileQuery(authFileQuery)
+    }, AUTH_FILE_QUERY_DEBOUNCE_MS)
+    return () => window.clearTimeout(timeoutID)
+  }, [authFileQuery])
   const setAuthFilePageSize = useCallback((pageSize: number) => {
     setAuthFilePage(1)
     setAuthFilePageSizeState(pageSize)
@@ -145,7 +154,7 @@ export function useCredentialPages({ enabledAuthFiles, enabledAiProviders, authF
     setAuthFilesLoading(true)
     setAuthFilesError('')
     try {
-      const response = await fetchUsageIdentitiesPage(controller.signal, { authType: 1, activeOnly: authFileActiveOnly ? true : undefined, types: credentialProviderFilterTypes('auth-files', authFileProviderFilter), proxyURLs: authFileProxyURLs, sort: authFileSort, page: authFilePage, pageSize: authFilePageSize, query: authFileQuery || undefined })
+      const response = await fetchUsageIdentitiesPage(controller.signal, { authType: 1, activeOnly: authFileActiveOnly ? true : undefined, types: credentialProviderFilterTypes('auth-files', authFileProviderFilter), proxyURLs: authFileProxyURLs, sort: authFileSort, page: authFilePage, pageSize: authFilePageSize, query: debouncedAuthFileQuery || undefined })
       if (authFilesRequestControllerRef.current !== controller) {
         return
       }
@@ -174,7 +183,7 @@ export function useCredentialPages({ enabledAuthFiles, enabledAiProviders, authF
         authFilesRequestControllerRef.current = null
       }
     }
-  }, [authFileActiveOnly, authFilePage, authFilePageSize, authFileProviderFilter, authFileProxyURLs, authFileSort, authFileQuery, onAuthRequired])
+  }, [authFileActiveOnly, authFilePage, authFilePageSize, authFileProviderFilter, authFileProxyURLs, authFileSort, debouncedAuthFileQuery, onAuthRequired])
 
   const refreshAiProviders = useCallback(async () => {
     aiProvidersRequestControllerRef.current?.abort()

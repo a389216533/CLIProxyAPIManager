@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
-import { CpaApiKeyManagerCard } from '@/components/usage';
-import type { CpaRuntimeStatusResponse, CpaUpdateEvent, CpaApiKeySettingsItem } from '@/lib/types';
+import type { CpaRuntimeStatusResponse, CpaUpdateEvent } from '@/lib/types';
 import styles from '../UsagePage.module.scss';
 
 interface UsageCpaManagerTabProps {
@@ -15,16 +14,8 @@ interface UsageCpaManagerTabProps {
   restartCpaRuntime: () => Promise<CpaRuntimeStatusResponse>;
   stopCpaRuntime: () => Promise<CpaRuntimeStatusResponse>;
   updateCpaRuntime: () => Promise<CpaRuntimeStatusResponse>;
+  onShowUpdateDetails: () => void;
   cpaManagementURL: string;
-  apiKeySettings: CpaApiKeySettingsItem[];
-  apiKeySettingsLoading: boolean;
-  apiKeySettingsCreating: boolean;
-  apiKeySettingsSavingId: string | null;
-  apiKeySettingsDeletingId: string | null;
-  handleCreateApiKey: (keyAlias: string, apiKey: string) => Promise<void>;
-  handleSaveApiKey: (id: string, keyAlias: string, apiKey: string) => Promise<void>;
-  handleDeleteApiKey: (id: string) => Promise<void>;
-  showTopNotice: (kind: 'success' | 'info' | 'error', message: string) => void;
   cpaEvents: CpaUpdateEvent[];
 }
 
@@ -39,16 +30,8 @@ export function UsageCpaManagerTab({
   restartCpaRuntime,
   stopCpaRuntime,
   updateCpaRuntime,
+  onShowUpdateDetails,
   cpaManagementURL,
-  apiKeySettings,
-  apiKeySettingsLoading,
-  apiKeySettingsCreating,
-  apiKeySettingsSavingId,
-  apiKeySettingsDeletingId,
-  handleCreateApiKey,
-  handleSaveApiKey,
-  handleDeleteApiKey,
-  showTopNotice,
   cpaEvents,
 }: UsageCpaManagerTabProps) {
   const { t } = useTranslation();
@@ -106,7 +89,10 @@ export function UsageCpaManagerTab({
           </div>
           {cpaRuntime?.updateAvailable && (
             <div className={styles.cpaUpdateBanner}>
-              {t('usage_stats.cpa_update_available', { version: cpaRuntime.latestVersion })}
+              <span>{t('usage_stats.cpa_update_available', { version: cpaRuntime.latestVersion })}</span>
+              <Button type="button" variant="secondary" size="sm" onClick={onShowUpdateDetails}>
+                {t('usage_stats.cpa_view_release_notes')}
+              </Button>
             </div>
           )}
           {cpaRuntime?.lastError?.message && (
@@ -171,18 +157,6 @@ export function UsageCpaManagerTab({
           </div>
         </div>
       </section>
-
-      <CpaApiKeyManagerCard
-        apiKeys={apiKeySettings}
-        loading={apiKeySettingsLoading}
-        creating={apiKeySettingsCreating}
-        savingId={apiKeySettingsSavingId}
-        deletingId={apiKeySettingsDeletingId}
-        onCreate={handleCreateApiKey}
-        onSave={handleSaveApiKey}
-        onDelete={handleDeleteApiKey}
-        onNotice={showTopNotice}
-      />
 
       <section className={`card ${styles.cpaManagerCard}`}>
         <div className="card-header">

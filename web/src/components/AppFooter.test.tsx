@@ -13,7 +13,7 @@ describe('AppFooter', () => {
 
     expect(html).toContain('© 2026');
     expect(html).toContain(`href="${GITHUB_REPOSITORY_URL}"`);
-    expect(html).toContain('>CLIProxyAPIManager</a>');
+    expect(html).toContain('>CPA Manager</a>');
     expect(html).toContain('License');
     expect(html).toContain('CLIProxyAPI Integration');
     expect(html).toContain('class="app-footer-line app-footer-meta"');
@@ -23,7 +23,7 @@ describe('AppFooter', () => {
     expect(html).toContain('<svg');
     expect(html).toContain('a389216533');
     expect(html).toContain('Version: v1.2.3');
-    expect(html).toContain(`CLIProxyAPIManager</a><span>·</span><a href="${GITHUB_REPOSITORY_URL}/blob/main/LICENSE"`);
+    expect(html).toContain(`CPA Manager</a><span>·</span><a href="${GITHUB_REPOSITORY_URL}/blob/main/LICENSE"`);
     expect(html).toContain(`License</a><span>·</span><a href="${CLIPROXYAPI_REPOSITORY_URL}"`);
     expect(html).toContain(`href="${GITHUB_PROFILE_URL}"`);
     expect(html).toContain('a389216533</span></a><span class="app-footer-version-separator" aria-hidden="true">·</span><span class="app-footer-version">Version: v1.2.3</span>');
